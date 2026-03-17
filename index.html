@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Spider Solitaire - Arena</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #2e7d32; /* Klassinen verka-vihreä */
+            color: white;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #game-header {
+            width: 100%;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .stat-box {
+            text-align: center;
+            background: rgba(255,255,255,0.1);
+            padding: 5px 15px;
+            border-radius: 8px;
+        }
+
+        #game-board {
+            display: flex;
+            gap: 10px;
+            padding: 20px;
+            width: 95vw;
+            height: 80vh;
+            justify-content: center;
+        }
+
+        .column {
+            width: 120px;
+            height: 100%;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+            position: relative;
+        }
+
+        /* Kortti-tyylit (toteutetaan myöhemmin koodilla) */
+        .card {
+            width: 100px;
+            height: 140px;
+            background: white;
+            border: 1px solid #999;
+            border-radius: 8px;
+            position: absolute;
+            color: black;
+            cursor: pointer;
+            user-select: none;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .card.back {
+            background: #1565c0;
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,.1) 10px, rgba(255,255,255,.1) 20px);
+        }
+
+        #history-panel {
+            position: fixed;
+            right: 10px;
+            bottom: 10px;
+            background: white;
+            color: black;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            max-width: 200px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-header">
+    <div class="stat-box">
+        <div>Siirrot</div>
+        <div id="move-count">0</div>
+    </div>
+    <div class="stat-box">
+        <div>Aika</div>
+        <div id="timer">00:00</div>
+    </div>
+    <div class="stat-box">
+        <div>Paras (5 peliä)</div>
+        <div id="best-score">-</div>
+    </div>
+    <button onclick="resetGame()">Uusi Jako</button>
+</div>
+
+<div id="game-board">
+    </div>
+
+<div id="history-panel">
+    <strong>Viimeisimmät pelit:</strong>
+    <ul id="history-list"></ul>
+</div>
+
+<script>
+    // PELIN TILA
+    let moves = 0;
+    let seconds = 0;
+    let timerInterval;
+    let history = JSON.parse(localStorage.getItem('spider_history')) || [];
+
+    function initGame() {
+        createBoard();
+        updateHistoryUI();
+        startTimer();
+        // Tähän tulee pakan sekoitus ja jako
+    }
+
+    function createBoard() {
+        const board = document.getElementById('game-board');
+        board.innerHTML = '';
+        for (let i = 0; i < 10; i++) {
+            const col = document.createElement('div');
+            col.className = 'column';
+            col.id = `col-${i}`;
+            // Lisätään drop-eventit moninpeliä ja siirtoja varten
+            board.appendChild(col);
+        }
+    }
+
+    function incrementMoves() {
+        moves++;
+        document.getElementById('move-count').innerText = moves;
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        seconds = 0;
+        timerInterval = setInterval(() => {
+            seconds++;
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toString().padStart(2, '0');
+            document.getElementById('timer').innerText = `${mins}:${secs}`;
+        }, 1000);
+    }
+
+    function saveGameResult(finalMoves) {
+        history.push({ date: new Date().toLocaleDateString(), moves: finalMoves });
+        if (history.length > 5) history.shift(); // Pidetään vain viimeiset 5
+        localStorage.setItem('spider_history', JSON.stringify(history));
+        updateHistoryUI();
+    }
+
+    function updateHistoryUI() {
+        const list = document.getElementById('history-list');
+        list.innerHTML = '';
+        history.forEach(game => {
+            const li = document.createElement('li');
+            li.innerText = `${game.date}: ${game.moves} siirtoa`;
+            list.appendChild(li);
+        });
+
+        if (history.length > 0) {
+            const best = Math.min(...history.map(g => g.moves));
+            document.getElementById('best-score').innerText = best;
+        }
+    }
+
+    function resetGame() {
+        if(confirm("Haluatko varmasti aloittaa alusta?")) {
+            moves = 0;
+            document.getElementById('move-count').innerText = moves;
+            initGame();
+        }
+    }
+
+    // Käynnistetään peli
+    initGame();
+</script>
+
+</body>
+</html> 
