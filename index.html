@@ -3,141 +3,251 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Spider Solitaire - Arena</title>
+    <title>Multiplayer Spider Solitaire</title>
     <style>
+        :root {
+            --card-width: 80px;
+            --card-height: 110px;
+            --green: #2e7d32;
+        }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #2e7d32; /* Klassinen verka-vihreä */
+            font-family: sans-serif;
+            background-color: var(--green);
             color: white;
             margin: 0;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            height: 100vh;
         }
-
         #game-header {
-            width: 100%;
-            padding: 10px 20px;
-            background: rgba(0,0,0,0.3);
+            background: rgba(0,0,0,0.4);
+            padding: 10px;
             display: flex;
             justify-content: space-around;
             align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 100;
         }
-
-        .stat-box {
-            text-align: center;
-            background: rgba(255,255,255,0.1);
-            padding: 5px 15px;
-            border-radius: 8px;
-        }
-
+        .stat-box { text-align: center; }
         #game-board {
             display: flex;
-            gap: 10px;
-            padding: 20px;
-            width: 95vw;
-            height: 80vh;
             justify-content: center;
+            gap: 8px;
+            padding: 20px;
+            flex-grow: 1;
         }
-
         .column {
-            width: 120px;
+            width: var(--card-width);
             height: 100%;
             background: rgba(255,255,255,0.05);
-            border-radius: 5px;
+            border-radius: 4px;
             position: relative;
         }
-
-        /* Kortti-tyylit (toteutetaan myöhemmin koodilla) */
         .card {
-            width: 100px;
-            height: 140px;
+            width: var(--card-width);
+            height: var(--card-height);
             background: white;
-            border: 1px solid #999;
-            border-radius: 8px;
+            border-radius: 5px;
             position: absolute;
             color: black;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.2em;
             cursor: pointer;
             user-select: none;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
         }
-
         .card.back {
             background: #1565c0;
-            background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,.1) 10px, rgba(255,255,255,.1) 20px);
+            color: transparent;
+            border: 2px solid white;
         }
-
-        #history-panel {
-            position: fixed;
-            right: 10px;
-            bottom: 10px;
-            background: white;
-            color: black;
-            padding: 10px;
+        #deck-pile {
+            width: var(--card-width);
+            height: var(--card-height);
+            background: #1565c0;
             border-radius: 5px;
-            font-size: 0.8em;
-            max-width: 200px;
+            cursor: pointer;
+            border: 2px solid white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #message-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: none;
         }
     </style>
 </head>
 <body>
 
 <div id="game-header">
-    <div class="stat-box">
-        <div>Siirrot</div>
-        <div id="move-count">0</div>
-    </div>
-    <div class="stat-box">
-        <div>Aika</div>
-        <div id="timer">00:00</div>
-    </div>
-    <div class="stat-box">
-        <div>Paras (5 peliä)</div>
-        <div id="best-score">-</div>
-    </div>
-    <button onclick="resetGame()">Uusi Jako</button>
+    <div id="deck-pile" onclick="dealMoreCards()">Jaa lisää</div>
+    <div class="stat-box">Siirrot: <span id="move-count">0</span></div>
+    <div class="stat-box">Aika: <span id="timer">00:00</span></div>
+    <div class="stat-box">Ennätys: <span id="best-score">-</span></div>
+    <button onclick="resetGame()">Uusi peli</button>
 </div>
 
-<div id="game-board">
-    </div>
-
-<div id="history-panel">
-    <strong>Viimeisimmät pelit:</strong>
-    <ul id="history-list"></ul>
-</div>
+<div id="game-board"></div>
+<div id="message-bar"></div>
 
 <script>
-    // PELIN TILA
     let moves = 0;
     let seconds = 0;
     let timerInterval;
-    let history = JSON.parse(localStorage.getItem('spider_history')) || [];
+    let deck = [];
+    let draggedCards = [];
+    let sourceColId = null;
+
+    const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+    const labels = {1:'A', 11:'J', 12:'Q', 13:'K'};
 
     function initGame() {
-        createBoard();
-        updateHistoryUI();
+        moves = 0;
+        document.getElementById('move-count').innerText = moves;
+        createDeck();
+        renderBoard();
+        shuffleAndDealInitial();
         startTimer();
-        // Tähän tulee pakan sekoitus ja jako
     }
 
-    function createBoard() {
+    function createDeck() {
+        deck = [];
+        // 8 sarjaa Pataa (104 korttia)
+        for (let i = 0; i < 8; i++) {
+            values.forEach(v => deck.push({ value: v, suit: '♠', visible: false }));
+        }
+        // Sekoitus
+        for (let i = deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+    }
+
+    function renderBoard() {
         const board = document.getElementById('game-board');
         board.innerHTML = '';
         for (let i = 0; i < 10; i++) {
             const col = document.createElement('div');
             col.className = 'column';
-            col.id = `col-${i}`;
-            // Lisätään drop-eventit moninpeliä ja siirtoja varten
+            col.id = 'col-' + i;
+            col.addEventListener('dragover', e => e.preventDefault());
+            col.addEventListener('drop', handleDrop);
             board.appendChild(col);
         }
     }
 
-    function incrementMoves() {
+    function shuffleAndDealInitial() {
+        for (let i = 0; i < 54; i++) {
+            const colIndex = i % 10;
+            const cardData = deck.pop();
+            if (i >= 44) cardData.visible = true;
+            addCardToUI(colIndex, cardData);
+        }
+    }
+
+    function addCardToUI(colIndex, data) {
+        const col = document.getElementById('col-' + colIndex);
+        const card = document.createElement('div');
+        card.className = 'card ' + (data.visible ? '' : 'back');
+        card.dataset.value = data.value;
+        card.style.top = (col.children.length * 25) + 'px';
+        card.innerHTML = data.visible ? (labels[data.value] || data.value) + '♠' : '';
+        
+        if (data.visible) {
+            card.draggable = true;
+            card.addEventListener('dragstart', handleDragStart);
+        }
+        col.appendChild(card);
+    }
+
+    function handleDragStart(e) {
+        const col = e.target.parentElement;
+        const cardsInCol = Array.from(col.children);
+        const index = cardsInCol.indexOf(e.target);
+        
+        // Tarkistetaan voiko pinoa siirtää (oltava peräkkäiset numerot)
+        for (let i = index; i < cardsInCol.length - 1; i++) {
+            if (parseInt(cardsInCol[i].dataset.value) !== parseInt(cardsInCol[i+1].dataset.value) + 1) {
+                teacherMessage("Voit siirtää vain oikeassa järjestyksessä olevia pinoja!");
+                e.preventDefault();
+                return;
+            }
+        }
+
+        sourceColId = col.id;
+        draggedCards = cardsInCol.slice(index);
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        const targetCol = e.currentTarget;
+        const lastCard = targetCol.lastElementChild;
+        
+        if (lastCard) {
+            const targetVal = parseInt(lastCard.dataset.value);
+            const draggedVal = parseInt(draggedCards[0].dataset.value);
+
+            if (targetVal !== draggedVal + 1) {
+                teacherMessage("Opettaja: Kortti on siirrettävä yhtä suuremman päälle (esim. 7 -> 8)");
+                return;
+            }
+        }
+
+        // Siirretään kortit
+        draggedCards.forEach(card => targetCol.appendChild(card));
+        fixOffsets(document.getElementById(sourceColId));
+        fixOffsets(targetCol);
+        
+        // Käännetään vanhan pinon ylin kortti
+        const oldCol = document.getElementById(sourceColId);
+        if (oldCol.lastElementChild && oldCol.lastElementChild.classList.contains('back')) {
+            revealCard(oldCol.lastElementChild);
+        }
+
         moves++;
         document.getElementById('move-count').innerText = moves;
+        checkWin(targetCol);
+    }
+
+    function revealCard(card) {
+        card.classList.remove('back');
+        card.draggable = true;
+        const val = card.dataset.value;
+        card.innerHTML = (labels[val] || val) + '♠';
+        card.addEventListener('dragstart', handleDragStart);
+    }
+
+    function fixOffsets(col) {
+        Array.from(col.children).forEach((card, i) => {
+            card.style.top = (i * 25) + 'px';
+        });
+    }
+
+    function dealMoreCards() {
+        if (deck.length === 0) return;
+        for (let i = 0; i < 10; i++) {
+            const cardData = deck.pop();
+            cardData.visible = true;
+            addCardToUI(i, cardData);
+        }
+        moves++;
+        document.getElementById('move-count').innerText = moves;
+    }
+
+    function teacherMessage(msg) {
+        const bar = document.getElementById('message-bar');
+        bar.innerText = msg;
+        bar.style.display = 'block';
+        setTimeout(() => bar.style.display = 'none', 3000);
     }
 
     function startTimer() {
@@ -145,45 +255,21 @@
         seconds = 0;
         timerInterval = setInterval(() => {
             seconds++;
-            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-            const secs = (seconds % 60).toString().padStart(2, '0');
-            document.getElementById('timer').innerText = `${mins}:${secs}`;
+            const m = Math.floor(seconds/60).toString().padStart(2,'0');
+            const s = (seconds%60).toString().padStart(2,'0');
+            document.getElementById('timer').innerText = `${m}:${s}`;
         }, 1000);
     }
 
-    function saveGameResult(finalMoves) {
-        history.push({ date: new Date().toLocaleDateString(), moves: finalMoves });
-        if (history.length > 5) history.shift(); // Pidetään vain viimeiset 5
-        localStorage.setItem('spider_history', JSON.stringify(history));
-        updateHistoryUI();
-    }
-
-    function updateHistoryUI() {
-        const list = document.getElementById('history-list');
-        list.innerHTML = '';
-        history.forEach(game => {
-            const li = document.createElement('li');
-            li.innerText = `${game.date}: ${game.moves} siirtoa`;
-            list.appendChild(li);
-        });
-
-        if (history.length > 0) {
-            const best = Math.min(...history.map(g => g.moves));
-            document.getElementById('best-score').innerText = best;
-        }
+    function checkWin(col) {
+        // Tähän voi lisätä logiikan, joka poistaa täyden sarjan (K->A)
     }
 
     function resetGame() {
-        if(confirm("Haluatko varmasti aloittaa alusta?")) {
-            moves = 0;
-            document.getElementById('move-count').innerText = moves;
-            initGame();
-        }
+        if(confirm("Aloitetaanko alusta?")) initGame();
     }
 
-    // Käynnistetään peli
     initGame();
 </script>
-
 </body>
-</html> 
+</html>
