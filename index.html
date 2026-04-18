@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Walking Spider Solitaire - Moninpeli</title>
+  <title>Walking Spider & Scorpio Solitaire - Moninpeli</title>
 
   <script src="https://cdn.jsdelivr.net/npm/seedrandom@3.0.5/seedrandom.min.js"></script>
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7652525244986434" crossorigin="anonymous"></script>
@@ -23,13 +23,26 @@
     @media (max-width: 600px) { .card { margin-bottom: -15px; font-size: 12px; } }
     .card.face-down { background: #1a5f4a; color: transparent; border: 1px solid rgba(255,255,255,0.2); }
     .card.selected { outline: 3px solid #ffeb3b; z-index: 100; transform: translateY(-4px); }
+    .game-selector { margin-bottom: 15px; }
   </style>
 </head>
 <body>
 
 <div class="header-row">
-    <h2 style="margin:0; font-size: 20px;">🕷️ Walking Spider - Moninpeli</h2>
+    <h2 style="margin:0; font-size: 20px;">🕷️ Walking Spider & Scorpio - Moninpeli</h2>
     <div class="active-pill">🚶 <span id="activeClock">00:00</span></div>
+</div>
+
+<div class="game-selector">
+  <select id="gameSelect" onchange="switchGame()">
+    <option value="spider">Spider Solitaire</option>
+    <option value="scorpio">Scorpio Solitaire</option>
+  </select>
+  <select id="suitSelect" onchange="updateSuits()">
+    <option value="1">1 maa (pata)</option>
+    <option value="2">2 maata (pata, risti)</option>
+    <option value="4">4 maata (pata, risti, ruutu, hertta)</option>
+  </select>
 </div>
 
 <div class="controls">
@@ -49,23 +62,50 @@
 
 <script>
 let stockDeck = [], columns = [], selectedCol = -1, selectedIdx = -1, moveHistory = [];
+let currentGame = "spider";
+let suits = 1;
+
+function switchGame() {
+  currentGame = document.getElementById("gameSelect").value;
+  newGame();
+}
+
+function updateSuits() {
+  suits = parseInt(document.getElementById("suitSelect").value);
+  newGame();
+}
 
 function newGame() {
   const seed = document.getElementById("seedInput").value || Math.random().toString(36).substring(2);
   Math.seedrandom(seed);
 
   let deck = [];
-  for (let p = 0; p < 8; p++) { for (let r = 1; r <= 13; r++) { deck.push({rank: r, faceUp: false}); } }
+  for (let p = 0; p < suits; p++) {
+    for (let r = 1; r <= 13; r++) {
+      deck.push({rank: r, suit: p, faceUp: false});
+    }
+  }
   deck.sort(() => Math.random() - 0.5);
 
-  columns = Array.from({ length: 10 }, () => []);
-  for (let c = 0; c < 10; c++) {
-    let count = c < 4 ? 6 : 5;
-    for (let i = 0; i < count; i++) { columns[c].push(deck.pop()); }
-    columns[c][columns[c].length - 1].faceUp = true;
+  if (currentGame === "spider") {
+    columns = Array.from({ length: 10 }, () => []);
+    for (let c = 0; c < 10; c++) {
+      let count = c < 4 ? 6 : 5;
+      for (let i = 0; i < count; i++) { columns[c].push(deck.pop()); }
+      columns[c][columns[c].length - 1].faceUp = true;
+    }
+    stockDeck = deck;
+  } else if (currentGame === "scorpio") {
+    columns = Array.from({ length: 7 }, () => []);
+    for (let c = 0; c < 7; c++) {
+      for (let i = 0; i < 4; i++) { columns[c].push(deck.pop()); }
+      columns[c][columns[c].length - 1].faceUp = true;
+    }
+    stockDeck = deck;
   }
-  stockDeck = deck; selectedCol = -1; selectedIdx = -1; moveHistory = [];
-  drawTable(); updateInfo(`Spider alkanut siemenellä: "${seed}" (Vain pata)`);
+
+  selectedCol = -1; selectedIdx = -1; moveHistory = [];
+  drawTable(); updateInfo(`${currentGame === "spider" ? "Spider" : "Scorpio"} alkanut siemenellä: "${seed}"`);
 }
 
 function drawTable() {
@@ -80,7 +120,8 @@ function drawTable() {
       cardDiv.className = "card" + (!card.faceUp ? " face-down" : "");
       if (cIdx === selectedCol && rIdx >= selectedIdx) cardDiv.classList.add("selected");
       if (card.faceUp) {
-        cardDiv.innerHTML = `<div style="text-align:left">${getRankName(card.rank)}</div><div style="text-align:right; font-size:1.2em; margin-top:auto">♠</div>`;
+        const suitSymbols = ["♠", "♣", "♦", "♥"];
+        cardDiv.innerHTML = `<div style="text-align:left">${getRankName(card.rank)}</div><div style="text-align:right; font-size:1.2em; margin-top:auto">${suitSymbols[card.suit]}</div>`;
         cardDiv.onclick = (e) => { e.stopPropagation(); handleCardClick(cIdx, rIdx); };
       }
       colDiv.appendChild(cardDiv);
@@ -121,7 +162,7 @@ function dealStock() {
   if (columns.some(col => col.length === 0)) { updateInfo("Täytä tyhjät sarakkeet!"); return; }
   if (stockDeck.length > 0) {
     moveHistory.push(JSON.parse(JSON.stringify(columns)));
-    for (let c = 0; c < 10; c++) {
+    for (let c = 0; c < columns.length; c++) {
       let card = stockDeck.pop();
       if(card) { card.faceUp = true; columns[c].push(card); }
     }
