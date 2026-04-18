@@ -6,8 +6,8 @@
     <title>Itsmyid Arena - Smart Click</title>
     <style>
         :root {
-            --card-width: 36px;
-            --card-height: 54px;
+            --card-width: 34px;
+            --card-height: 52px;
             --green: #1b5e20;
         }
         body {
@@ -23,45 +23,45 @@
         }
         #ui-layer {
             background: rgba(0,0,0,0.9);
-            padding: 10px;
+            padding: 8px;
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
             z-index: 1000;
         }
-        .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; }
+        .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; margin-bottom: 5px; }
         .stat-box { background: #333; padding: 5px; border-radius: 4px; text-align: center; font-size: 0.8em; }
         
         #game-board {
             display: flex;
             justify-content: center;
             gap: 3px;
-            padding: 15px 2px;
+            padding: 10px 2px;
             flex-grow: 1;
+            position: relative;
         }
         .column {
             width: var(--card-width);
-            height: 85%;
+            height: 90%;
             background: rgba(255,255,255,0.05);
             border-radius: 4px;
             position: relative;
-            min-height: 200px;
         }
         .card {
             width: var(--card-width);
             height: var(--card-height);
             background: white;
-            border-radius: 4px;
+            border-radius: 3px;
             position: absolute;
             color: black;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            font-size: 1.1em;
-            border: 1px solid #777;
+            font-size: 1em;
+            border: 1px solid #999;
             box-sizing: border-box;
             pointer-events: none;
         }
@@ -69,7 +69,7 @@
         
         #message-bar {
             position: fixed;
-            bottom: 15%;
+            bottom: 20%;
             left: 50%;
             transform: translateX(-50%);
             background: #ffeb3b;
@@ -80,7 +80,7 @@
             font-weight: bold;
             z-index: 2000;
         }
-        input, select, button { font-size: 16px; padding: 6px; }
+        input, select, button { font-size: 16px; padding: 5px; border-radius: 4px; border: none; }
     </style>
 </head>
 <body>
@@ -91,12 +91,12 @@
             <option value="spider">Spider</option>
             <option value="scorpio">Scorpio</option>
         </select>
-        <input type="text" id="seed-input" placeholder="Siemen">
-        <button onclick="initGame()">JAO</button>
+        <input type="text" id="seed-input" placeholder="Siemen" style="width: 80px;">
+        <button onclick="initGame()" style="background: #4caf50; color: white;">JAO</button>
     </div>
     <div class="stat-box">Pisteet: <span id="score">500</span></div>
     <div class="stat-box">Siirrot: <span id="move-count">0</span></div>
-    <div id="deck-btn" class="stat-box" style="background:#1565c0; grid-column: span 2; padding: 12px;" onclick="dealMore()">NAPAUTA TÄSTÄ JAAKSESI LISÄÄ</div>
+    <div id="deck-btn" class="stat-box" style="background:#1565c0; grid-column: span 2; padding: 10px;" onclick="dealMore()">JAA LISÄÄ KORTTEJA</div>
 </div>
 
 <div id="game-board"></div>
@@ -115,16 +115,29 @@
     }
 
     function initGame() {
+        const board = document.getElementById('game-board');
+        if (!board) return;
+
         const seedVal = document.getElementById('seed-input').value || Math.random().toString();
         const rng = mulberry32(Array.from(seedVal).reduce((a,b)=>(((a<<5)-a)+b.charCodeAt(0))|0,0));
         currentGame = document.getElementById('game-mode').value;
+        
         moves = 0; score = 500; deck = [];
         const decks = (currentGame === 'spider') ? 8 : 4;
         for(let i=0; i<decks; i++) for(let v=1; v<=13; v++) deck.push({v, s:'♠'});
         for(let i=deck.length-1; i>0; i--) { const j=Math.floor(rng()*(i+1)); [deck[i], deck[j]]=[deck[j], deck[i]]; }
+        
         renderBoard();
         deal();
         updateStats();
+        
+        if (currentGame === 'scorpio') {
+            document.getElementById('deck-btn').innerText = "JAA LOPUT 3 KORTTIA";
+            document.getElementById('deck-btn').style.display = 'block';
+        } else {
+            document.getElementById('deck-btn').innerText = "JAA LISÄÄ KORTTEJA";
+            document.getElementById('deck-btn').style.display = 'block';
+        }
     }
 
     function renderBoard() {
@@ -147,12 +160,12 @@
                 const c = i%7, r = Math.floor(i/7);
                 addCard(c, deck.pop(), !(c<3 && r<3));
             }
-            document.getElementById('deck-btn').innerText = "JAA LOPUT 3 KORTTIA";
         }
     }
 
     function addCard(colIdx, data, visible) {
-        const col = document.getElementById('game-board').children[colIdx];
+        const board = document.getElementById('game-board');
+        const col = board.children[colIdx];
         const card = document.createElement('div');
         card.className = 'card' + (visible ? '' : ' back');
         card.dataset.value = data.v;
@@ -161,13 +174,11 @@
         col.appendChild(card);
     }
 
-    // ÄLYKÄS YHDEN KLIKKAUKSEN SIIRTO
     function autoMove(sourceIdx) {
         const sourceCol = document.getElementById('game-board').children[sourceIdx];
         const cards = Array.from(sourceCol.children);
         if (cards.length === 0) return;
 
-        // Etsitään pino, jota yritetään siirtää
         let pino = [];
         for (let i = cards.length - 1; i >= 0; i--) {
             if (cards[i].classList.contains('back')) break;
@@ -176,21 +187,14 @@
             }
             pino.unshift(cards[i]);
             
-            // Yritetään katsoa, voiko tämän nipun siirtää johonkin
             const targetIdx = findBestTarget(sourceIdx, parseInt(pino[0].dataset.value));
             if (targetIdx !== -1) {
                 executeMove(sourceIdx, targetIdx, pino);
                 return;
             }
-            
-            // Scorpiossa voi yrittää siirtää koko näkyvää nippua, Spiderissa vain sarjaa
-            if (currentGame === 'spider' && pino.length > 1) {
-                 // Jatka silmukkaa, jos spider-sarja kasvaa
-            } else if (currentGame === 'scorpio') {
-                 // Jatka silmukkaa, kokeile isompia nippuja
-            } else {
-                if (pino.length === 1) break; 
-            }
+            if (currentGame === 'spider' && pino.length > 1) {} 
+            else if (currentGame === 'scorpio') {} 
+            else { if (pino.length === 1) break; }
         }
         msg("Ei siirtoja");
     }
@@ -198,20 +202,91 @@
     function findBestTarget(excludeIdx, movingVal) {
         const cols = document.getElementById('game-board').children;
         let bestEmpty = -1;
-
         for (let i = 0; i < cols.length; i++) {
             if (i === excludeIdx) continue;
             const targetLast = cols[i].lastElementChild;
-            
             if (targetLast) {
                 if (parseInt(targetLast.dataset.value) === movingVal + 1) return i;
             } else {
-                if (movingVal === 13) bestEmpty = i; // Säästetään kuningas tyhjään viimeiseksi vaihtoehdoksi
+                if (movingVal === 13) bestEmpty = i;
             }
         }
         return bestEmpty;
     }
 
     function executeMove(sIdx, tIdx, pino) {
-        const sCol = document.getElementById('
-  
+        const sCol = document.getElementById('game-board').children[sIdx];
+        const tCol = document.getElementById('game-board').children[tIdx];
+        const isFreeKing = (pino[0].dataset.value == 13 && sCol.children[0] === pino[0] && tCol.children.length === 0);
+        
+        pino.forEach(c => tCol.appendChild(c));
+        if (!isFreeKing) { moves++; score--; }
+
+        if (sCol.lastElementChild?.classList.contains('back')) {
+            const c = sCol.lastElementChild;
+            c.classList.remove('back');
+            const v = c.dataset.value;
+            c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[v]||v}</div><div>♠</div>`;
+        }
+        fixOffsets(sCol);
+        fixOffsets(tCol);
+        checkWin(tCol);
+        updateStats();
+    }
+
+    function fixOffsets(col) {
+        Array.from(col.children).forEach((c, i) => c.style.top = (i * 15) + 'px');
+    }
+
+    function dealMore() {
+        if(currentGame === 'spider') {
+            if(deck.length === 0) return;
+            for(let i=0; i<10; i++) addCard(i, deck.pop(), true);
+        } else if(deck.length > 0) {
+            for(let i=0; i<3; i++) addCard(i, deck.pop(), true);
+            document.getElementById('deck-btn').style.display = 'none';
+        }
+        moves++; score--; updateStats();
+    }
+
+    function checkWin(col) {
+        const cards = Array.from(col.children);
+        for (let i = 0; i <= cards.length - 13; i++) {
+            let seq = true;
+            for (let j = 0; j < 12; j++) {
+                if (parseInt(cards[i+j].dataset.value) !== parseInt(cards[i+j+1].dataset.value) + 1 || cards[i+j].classList.contains('back')) {
+                    seq = false; break;
+                }
+            }
+            if (seq && parseInt(cards[i].dataset.value) === 13) {
+                for (let k = 0; k < 13; k++) col.removeChild(cards[i+k]);
+                score += 100;
+                msg("SARJA VALMIS!");
+                if (col.lastElementChild?.classList.contains('back')) {
+                     const c = col.lastElementChild;
+                     c.classList.remove('back');
+                     c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[c.dataset.value]||c.dataset.value}</div><div>♠</div>`;
+                }
+                fixOffsets(col);
+                break;
+            }
+        }
+    }
+
+    function updateStats() {
+        document.getElementById('move-count').innerText = moves;
+        document.getElementById('score').innerText = score;
+    }
+
+    function msg(t) {
+        const b = document.getElementById('message-bar');
+        b.innerText = t; b.style.display = 'block';
+        setTimeout(() => b.style.display='none', 1000);
+    }
+
+    // Käynnistetään vasta kun sivu on ladattu
+    window.onload = initGame;
+</script>
+</body>
+</html>
+ 
