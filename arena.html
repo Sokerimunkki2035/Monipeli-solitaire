@@ -6,9 +6,8 @@
     <title>Multiplayer Spider Solitaire - Arena</title>
     <style>
         :root {
-            /* Pienemmät kortit mobiiliystävällisyyttä varten */
-            --card-width: 32px; /* Kapeampi, jotta 10 mahtuu rinnakkain */
-            --card-height: 48px; /* Lyhyempi suhteessa leveyteen */
+            --card-width: 32px;
+            --card-height: 48px;
             --green: #2e7d32;
         }
         body {
@@ -33,7 +32,7 @@
         #game-board {
             display: flex;
             justify-content: center;
-            gap: 2px; /* Hyvin pieni väli sarakkeiden välillä */
+            gap: 2px;
             padding: 10px;
             flex-grow: 1;
             width: 100vw;
@@ -58,21 +57,19 @@
             justify-content: center;
             align-items: center;
             font-weight: bold;
-            font-size: 0.9em; /* Pienempi fontti */
+            font-size: 0.9em;
             cursor: pointer;
             user-select: none;
             box-sizing: border-box;
             border: 1px solid #ccc;
+            transition: transform 0.2s;
         }
-        
-        /* Kortin sisällön asettelu */
         .card-content {
             display: flex;
             flex-direction: column;
             align-items: center;
             line-height: 1;
         }
-
         .card.back {
             background: #1565c0;
             color: transparent;
@@ -101,6 +98,7 @@
             border-radius: 20px;
             display: none;
             font-size: 0.8em;
+            z-index: 100;
         }
     </style>
 </head>
@@ -108,9 +106,9 @@
 
 <div id="game-header">
     <div id="deck-pile" onclick="dealMoreCards()">Jaa lisää</div>
+    <div class="stat-box">Pisteet: <span id="score">500</span></div>
     <div class="stat-box">Siirrot: <span id="move-count">0</span></div>
     <div class="stat-box">Aika: <span id="timer">00:00</span></div>
-    <div class="stat-box">Ennätys: <span id="best-score">-</span></div>
     <button onclick="resetGame()" style="font-size: 0.8em;">Uusi</button>
 </div>
 
@@ -119,6 +117,7 @@
 
 <script>
     let moves = 0;
+    let score = 500;
     let seconds = 0;
     let timerInterval;
     let deck = [];
@@ -130,7 +129,8 @@
 
     function initGame() {
         moves = 0;
-        document.getElementById('move-count').innerText = moves;
+        score = 500;
+        updateStats();
         createDeck();
         renderBoard();
         shuffleAndDealInitial();
@@ -139,11 +139,9 @@
 
     function createDeck() {
         deck = [];
-        // 8 sarjaa Pataa (104 korttia)
         for (let i = 0; i < 8; i++) {
             values.forEach(v => deck.push({ value: v, suit: '♠', visible: false }));
         }
-        // Sekoitus
         for (let i = deck.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -177,7 +175,6 @@
         const card = document.createElement('div');
         card.className = 'card ' + (data.visible ? '' : 'back');
         card.dataset.value = data.value;
-        // Enemmän limitystä pystysuunnassa (15px vs 25px)
         card.style.top = (col.children.length * 15) + 'px'; 
         
         if (data.visible) {
@@ -194,7 +191,6 @@
         const cardsInCol = Array.from(col.children);
         const index = cardsInCol.indexOf(e.target);
         
-        // Tarkistetaan voiko pinoa siirtää (oltava peräkkäiset numerot)
         for (let i = index; i < cardsInCol.length - 1; i++) {
             if (parseInt(cardsInCol[i].dataset.value) !== parseInt(cardsInCol[i+1].dataset.value) + 1) {
                 teacherMessage("Voit siirtää vain oikeassa järjestyksessä olevia pinoja!");
@@ -210,31 +206,45 @@
     function handleDrop(e) {
         e.preventDefault();
         const targetCol = e.currentTarget;
+        const sourceCol = document.getElementById(sourceColId);
         const lastCard = targetCol.lastElementChild;
-        
+        const draggedVal = parseInt(draggedCards[0].dataset.value);
+
+        // KUNINGAS-SÄÄNTÖ: Jos kuningas siirtyy tyhjään sarakkeeseen ja se oli jo sarakkeen ylimpänä, ei lasketa siirtoa
+        let isKingToEmpty = false;
+        if (!lastCard && draggedVal === 13) {
+            const isTopCardInSource = Array.from(sourceCol.children).indexOf(draggedCards[0]) === 0;
+            if (isTopCardInSource) {
+                isKingToEmpty = true;
+            }
+        }
+
         if (lastCard) {
             const targetVal = parseInt(lastCard.dataset.value);
-            const draggedVal = parseInt(draggedCards[0].dataset.value);
-
             if (targetVal !== draggedVal + 1) {
-                teacherMessage("Opettaja: Kortti on siirrettävä yhtä suuremman päälle (esim. 7 -> 8)");
+                teacherMessage("Vain yhtä suuremman päälle!");
                 return;
             }
         }
 
         // Siirretään kortit
         draggedCards.forEach(card => targetCol.appendChild(card));
-        fixOffsets(document.getElementById(sourceColId));
+        fixOffsets(sourceCol);
         fixOffsets(targetCol);
         
-        // Käännetään vanhan pinon ylin kortti
-        const oldCol = document.getElementById(sourceColId);
-        if (oldCol.lastElementChild && oldCol.lastElementChild.classList.contains('back')) {
-            revealCard(oldCol.lastElementChild);
+        if (sourceCol.lastElementChild && sourceCol.lastElementChild.classList.contains('back')) {
+            revealCard(sourceCol.lastElementChild);
         }
 
-        moves++;
-        document.getElementById('move-count').innerText = moves;
+        // Päivitetään tilastot (paitsi jos King-poikkeus)
+        if (!isKingToEmpty) {
+            moves++;
+            score--;
+            updateStats();
+        } else {
+            teacherMessage("Kuningas siirretty ilmaiseksi tyhjään sarakkeeseen!");
+        }
+
         checkWin(targetCol);
     }
 
@@ -255,20 +265,76 @@
 
     function dealMoreCards() {
         if (deck.length === 0) return;
+        // Spider-sääntö: tyhjiä sarakkeita ei saa olla kun jaetaan lisää
+        const columns = document.querySelectorAll('.column');
+        for (let col of columns) {
+            if (col.children.length === 0) {
+                teacherMessage("Täytä tyhjät sarakkeet ennen jakoa!");
+                return;
+            }
+        }
+
         for (let i = 0; i < 10; i++) {
             const cardData = deck.pop();
             cardData.visible = true;
             addCardToUI(i, cardData);
         }
         moves++;
+        score--;
+        updateStats();
+    }
+
+    function checkWin(col) {
+        const cards = Array.from(col.children);
+        if (cards.length < 13) return;
+
+        // Etsitään pino, jossa on 13 korttia järjestyksessä K-A
+        for (let i = 0; i <= cards.length - 13; i++) {
+            let sequence = true;
+            for (let j = 0; j < 12; j++) {
+                const current = parseInt(cards[i + j].dataset.value);
+                const next = parseInt(cards[i + j + 1].dataset.value);
+                if (current !== next + 1 || cards[i+j].classList.contains('back')) {
+                    sequence = false;
+                    break;
+                }
+            }
+
+            if (sequence && parseInt(cards[i].dataset.value) === 13) {
+                // Poistetaan sarja
+                for (let k = 0; k < 13; k++) {
+                    col.removeChild(cards[i + k]);
+                }
+                score += 100;
+                teacherMessage("Sarja valmis! +100 pistettä");
+                
+                // Jos alta paljastuu kortti, käännetään se
+                if (col.lastElementChild && col.lastElementChild.classList.contains('back')) {
+                    revealCard(col.lastElementChild);
+                }
+                
+                fixOffsets(col);
+                updateStats();
+                
+                // Tarkistetaan koko pelin voitto
+                if (document.querySelectorAll('.card').length === 0) {
+                    alert("Onneksi olkoon! Voitit pelin pisteillä: " + score);
+                }
+                break;
+            }
+        }
+    }
+
+    function updateStats() {
         document.getElementById('move-count').innerText = moves;
+        document.getElementById('score').innerText = score;
     }
 
     function teacherMessage(msg) {
         const bar = document.getElementById('message-bar');
         bar.innerText = msg;
         bar.style.display = 'block';
-        setTimeout(() => bar.style.display = 'none', 3000);
+        setTimeout(() => bar.style.display = 'none', 2500);
     }
 
     function startTimer() {
@@ -280,10 +346,6 @@
             const s = (seconds%60).toString().padStart(2,'0');
             document.getElementById('timer').innerText = `${m}:${s}`;
         }, 1000);
-    }
-
-    function checkWin(col) {
-        // Tähän voi lisätä logiikan, joka poistaa täyden sarjan (K->A)
     }
 
     function resetGame() {
