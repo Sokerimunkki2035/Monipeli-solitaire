@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Smart Click</title>
+    <title>Itsmyid Arena - Scorpio Fix</title>
     <style>
         :root {
-            --card-width: 34px;
-            --card-height: 52px;
+            --card-width: 32px;
+            --card-height: 48px;
             --green: #1b5e20;
         }
         body {
@@ -22,65 +22,53 @@
             touch-action: none;
         }
         #ui-layer {
-            background: rgba(0,0,0,0.9);
-            padding: 8px;
+            background: rgba(0,0,0,0.95);
+            padding: 5px;
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 5px;
             z-index: 1000;
         }
-        .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; margin-bottom: 5px; }
-        .stat-box { background: #333; padding: 5px; border-radius: 4px; text-align: center; font-size: 0.8em; }
+        .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; }
+        .stat-box { background: #333; padding: 3px; border-radius: 4px; text-align: center; font-size: 0.75em; }
         
         #game-board {
             display: flex;
             justify-content: center;
-            gap: 3px;
-            padding: 10px 2px;
+            gap: 2px;
+            padding: 5px 2px;
             flex-grow: 1;
             position: relative;
         }
         .column {
             width: var(--card-width);
-            height: 90%;
+            height: 100%;
             background: rgba(255,255,255,0.05);
-            border-radius: 4px;
             position: relative;
         }
         .card {
             width: var(--card-width);
             height: var(--card-height);
             background: white;
-            border-radius: 3px;
+            border-radius: 2px;
             position: absolute;
             color: black;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
+            padding-top: 2px;
             font-weight: bold;
-            font-size: 1em;
-            border: 1px solid #999;
+            font-size: 0.9em;
+            border: 0.5px solid #666;
             box-sizing: border-box;
-            pointer-events: none;
+            pointer-events: auto; /* Sallitaan klikkaus suoraan korttiin */
         }
         .card.back { background: #0d47a1; color: transparent; border: 1px solid white; }
+        .card.selected { border: 2px solid #ffeb3b; z-index: 100 !important; transform: scale(1.05); }
         
-        #message-bar {
-            position: fixed;
-            bottom: 20%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #ffeb3b;
-            color: black;
-            padding: 8px 15px;
-            border-radius: 15px;
-            display: none;
-            font-weight: bold;
-            z-index: 2000;
-        }
-        input, select, button { font-size: 16px; padding: 5px; border-radius: 4px; border: none; }
+        #deck-btn { background:#1565c0; grid-column: span 2; padding: 8px; text-align: center; font-size: 0.8em; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -91,19 +79,19 @@
             <option value="spider">Spider</option>
             <option value="scorpio">Scorpio</option>
         </select>
-        <input type="text" id="seed-input" placeholder="Siemen" style="width: 80px;">
+        <input type="text" id="seed-input" placeholder="Siemen" style="width: 60px;">
         <button onclick="initGame()" style="background: #4caf50; color: white;">JAO</button>
     </div>
     <div class="stat-box">Pisteet: <span id="score">500</span></div>
     <div class="stat-box">Siirrot: <span id="move-count">0</span></div>
-    <div id="deck-btn" class="stat-box" style="background:#1565c0; grid-column: span 2; padding: 10px;" onclick="dealMore()">JAA LISÄÄ KORTTEJA</div>
+    <div id="deck-btn" onclick="dealMore()">JAA LISÄÄ</div>
 </div>
 
 <div id="game-board"></div>
-<div id="message-bar"></div>
 
 <script>
     let moves = 0, score = 500, deck = [], currentGame = 'spider';
+    let selectedPino = null, sourceColIdx = null;
 
     function mulberry32(a) {
         return function() {
@@ -115,29 +103,18 @@
     }
 
     function initGame() {
-        const board = document.getElementById('game-board');
-        if (!board) return;
-
         const seedVal = document.getElementById('seed-input').value || Math.random().toString();
         const rng = mulberry32(Array.from(seedVal).reduce((a,b)=>(((a<<5)-a)+b.charCodeAt(0))|0,0));
         currentGame = document.getElementById('game-mode').value;
+        moves = 0; score = 500; deck = []; selectedPino = null;
         
-        moves = 0; score = 500; deck = [];
         const decks = (currentGame === 'spider') ? 8 : 4;
-        for(let i=0; i<decks; i++) for(let v=1; v<=13; v++) deck.push({v, s:'♠'});
+        for(let i=0; i<decks; i++) for(let v=1; v<=13; v++) deck.push({v});
         for(let i=deck.length-1; i>0; i--) { const j=Math.floor(rng()*(i+1)); [deck[i], deck[j]]=[deck[j], deck[i]]; }
         
         renderBoard();
-        deal();
+        dealInitial();
         updateStats();
-        
-        if (currentGame === 'scorpio') {
-            document.getElementById('deck-btn').innerText = "JAA LOPUT 3 KORTTIA";
-            document.getElementById('deck-btn').style.display = 'block';
-        } else {
-            document.getElementById('deck-btn').innerText = "JAA LISÄÄ KORTTEJA";
-            document.getElementById('deck-btn').style.display = 'block';
-        }
     }
 
     function renderBoard() {
@@ -147,12 +124,13 @@
         for(let i=0; i<count; i++) {
             const col = document.createElement('div');
             col.className = 'column';
-            col.onclick = () => autoMove(i);
+            col.id = 'col-' + i;
+            col.onclick = (e) => handleColClick(i, e);
             board.appendChild(col);
         }
     }
 
-    function deal() {
+    function dealInitial() {
         if(currentGame === 'spider') {
             for(let i=0; i<54; i++) addCard(i%10, deck.pop(), i>=44);
         } else {
@@ -164,78 +142,92 @@
     }
 
     function addCard(colIdx, data, visible) {
-        const board = document.getElementById('game-board');
-        const col = board.children[colIdx];
+        const col = document.getElementById('col-' + colIdx);
         const card = document.createElement('div');
         card.className = 'card' + (visible ? '' : ' back');
         card.dataset.value = data.v;
-        card.style.top = (col.children.length * 15) + 'px';
-        if(visible) card.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[data.v]||data.v}</div><div>♠</div>`;
-        col.appendChild(card);
-    }
-
-    function autoMove(sourceIdx) {
-        const sourceCol = document.getElementById('game-board').children[sourceIdx];
-        const cards = Array.from(sourceCol.children);
-        if (cards.length === 0) return;
-
-        let pino = [];
-        for (let i = cards.length - 1; i >= 0; i--) {
-            if (cards[i].classList.contains('back')) break;
-            if (pino.length > 0 && currentGame === 'spider') {
-                if (parseInt(cards[i].dataset.value) !== parseInt(pino[0].dataset.value) + 1) break;
-            }
-            pino.unshift(cards[i]);
-            
-            const targetIdx = findBestTarget(sourceIdx, parseInt(pino[0].dataset.value));
-            if (targetIdx !== -1) {
-                executeMove(sourceIdx, targetIdx, pino);
-                return;
-            }
-            if (currentGame === 'spider' && pino.length > 1) {} 
-            else if (currentGame === 'scorpio') {} 
-            else { if (pino.length === 1) break; }
-        }
-        msg("Ei siirtoja");
-    }
-
-    function findBestTarget(excludeIdx, movingVal) {
-        const cols = document.getElementById('game-board').children;
-        let bestEmpty = -1;
-        for (let i = 0; i < cols.length; i++) {
-            if (i === excludeIdx) continue;
-            const targetLast = cols[i].lastElementChild;
-            if (targetLast) {
-                if (parseInt(targetLast.dataset.value) === movingVal + 1) return i;
-            } else {
-                if (movingVal === 13) bestEmpty = i;
-            }
-        }
-        return bestEmpty;
-    }
-
-    function executeMove(sIdx, tIdx, pino) {
-        const sCol = document.getElementById('game-board').children[sIdx];
-        const tCol = document.getElementById('game-board').children[tIdx];
-        const isFreeKing = (pino[0].dataset.value == 13 && sCol.children[0] === pino[0] && tCol.children.length === 0);
+        if(visible) card.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[data.v]||data.v}</div><div style="font-size:0.7em">♠</div>`;
         
-        pino.forEach(c => tCol.appendChild(c));
-        if (!isFreeKing) { moves++; score--; }
+        card.onclick = (e) => {
+            e.stopPropagation();
+            handleCardClick(colIdx, card);
+        };
+        
+        col.appendChild(card);
+        fixOffsets(col);
+    }
 
-        if (sCol.lastElementChild?.classList.contains('back')) {
-            const c = sCol.lastElementChild;
-            c.classList.remove('back');
-            const v = c.dataset.value;
-            c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[v]||v}</div><div>♠</div>`;
+    function handleCardClick(colIdx, card) {
+        if (card.classList.contains('back')) return;
+        
+        const col = document.getElementById('col-' + colIdx);
+        const cards = Array.from(col.children);
+        const cardIdx = cards.indexOf(card);
+        
+        // Spider-tarkistus: saako pinon ottaa?
+        if (currentGame === 'spider') {
+            for (let i = cardIdx; i < cards.length - 1; i++) {
+                if (parseInt(cards[i].dataset.value) !== parseInt(cards[i+1].dataset.value) + 1) return;
+            }
         }
-        fixOffsets(sCol);
-        fixOffsets(tCol);
-        checkWin(tCol);
-        updateStats();
+
+        // Valitse pino
+        if (selectedPino) selectedPino.forEach(c => c.classList.remove('selected'));
+        
+        selectedPino = cards.slice(cardIdx);
+        sourceColIdx = colIdx;
+        selectedPino.forEach(c => c.classList.add('selected'));
+    }
+
+    function handleColClick(colIdx, e) {
+        if (!selectedPino) return;
+
+        const targetCol = document.getElementById('col-' + colIdx);
+        const sourceCol = document.getElementById('col-' + sourceColIdx);
+        const movingVal = parseInt(selectedPino[0].dataset.value);
+        const targetLast = targetCol.lastElementChild;
+
+        let canDrop = false;
+        if (!targetLast) {
+            if (movingVal === 13) canDrop = true; // Vain Kuningas tyhjään
+        } else if (parseInt(targetLast.dataset.value) === movingVal + 1) {
+            canDrop = true;
+        }
+
+        if (canDrop) {
+            const isFreeKing = (movingVal === 13 && !targetLast && sourceCol.children[0] === selectedPino[0]);
+            selectedPino.forEach(c => {
+                c.classList.remove('selected');
+                targetCol.appendChild(c);
+            });
+            if (!isFreeKing) { moves++; score--; }
+            
+            // Käännä uusi kortti esiin
+            if (sourceCol.lastElementChild?.classList.contains('back')) {
+                const c = sourceCol.lastElementChild;
+                c.classList.remove('back');
+                const v = c.dataset.value;
+                c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[v]||v}</div><div style="font-size:0.7em">♠</div>`;
+            }
+
+            selectedPino = null;
+            fixOffsets(sourceCol);
+            fixOffsets(targetCol);
+            checkWin(targetCol);
+            updateStats();
+        }
     }
 
     function fixOffsets(col) {
-        Array.from(col.children).forEach((c, i) => c.style.top = (i * 15) + 'px');
+        const cards = Array.from(col.children);
+        cards.forEach((c, i) => {
+            // Tiukempi pinoaminen: peitetyt 8px, näkyvät 16px
+            let offset = 0;
+            for(let j=0; j<i; j++) {
+                offset += cards[j].classList.contains('back') ? 8 : 16;
+            }
+            c.style.top = offset + 'px';
+        });
     }
 
     function dealMore() {
@@ -244,13 +236,14 @@
             for(let i=0; i<10; i++) addCard(i, deck.pop(), true);
         } else if(deck.length > 0) {
             for(let i=0; i<3; i++) addCard(i, deck.pop(), true);
-            document.getElementById('deck-btn').style.display = 'none';
+            document.getElementById('deck-btn').style.visibility = 'hidden';
         }
         moves++; score--; updateStats();
     }
 
     function checkWin(col) {
         const cards = Array.from(col.children);
+        if (cards.length < 13) return;
         for (let i = 0; i <= cards.length - 13; i++) {
             let seq = true;
             for (let j = 0; j < 12; j++) {
@@ -261,11 +254,10 @@
             if (seq && parseInt(cards[i].dataset.value) === 13) {
                 for (let k = 0; k < 13; k++) col.removeChild(cards[i+k]);
                 score += 100;
-                msg("SARJA VALMIS!");
                 if (col.lastElementChild?.classList.contains('back')) {
                      const c = col.lastElementChild;
                      c.classList.remove('back');
-                     c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[c.dataset.value]||c.dataset.value}</div><div>♠</div>`;
+                     c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[c.dataset.value]||c.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
                 }
                 fixOffsets(col);
                 break;
@@ -278,13 +270,6 @@
         document.getElementById('score').innerText = score;
     }
 
-    function msg(t) {
-        const b = document.getElementById('message-bar');
-        b.innerText = t; b.style.display = 'block';
-        setTimeout(() => b.style.display='none', 1000);
-    }
-
-    // Käynnistetään vasta kun sivu on ladattu
     window.onload = initGame;
 </script>
 </body>
