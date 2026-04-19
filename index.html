@@ -3,10 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Walking Spider & Scorpio Solitaire - Moninpeli</title>
+  <title>Focus Solitaire - Moninpeli</title>
 
   <script src="https://cdn.jsdelivr.net/npm/seedrandom@3.0.5/seedrandom.min.js"></script>
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7652525244986434" crossorigin="anonymous"></script>
 
   <style>
     :root { --card-aspect-ratio: 1.4; }
@@ -29,7 +28,7 @@
 <body>
 
 <div class="header-row">
-    <h2 style="margin:0; font-size: 20px;">🕷️ Walking Spider & Scorpio - Moninpeli</h2>
+    <h2 style="margin:0; font-size: 20px;">🕷️ Focus Solitaire - Moninpeli</h2>
     <div class="active-pill">🚶 <span id="activeClock">00:00</span></div>
 </div>
 
@@ -49,11 +48,6 @@
   <input type="text" id="seedInput" placeholder="Siemen (esim. sana)">
   <button onclick="newGame()">Uusi peli</button>
   <button onclick="dealStock()" style="background: #1a5f4a;">JAA PAKKA</button>
-  <select id="timeSelect" onchange="updateTargetTime()">
-      <option value="15">Tauko: 15 min</option>
-      <option value="25" selected>Tauko: 25 min</option>
-      <option value="45">Tauko: 45 min</option>
-  </select>
   <button onclick="undoMove()" style="background: #444;">Peru</button>
 </div>
 
@@ -77,6 +71,7 @@ function updateSuits() {
 
 function newGame() {
   const seed = document.getElementById("seedInput").value || Math.random().toString(36).substring(2);
+  alert("Peli aloitetaan siemenellä: " + seed);
   Math.seedrandom(seed);
 
   let deck = [];
@@ -91,24 +86,33 @@ function newGame() {
     columns = Array.from({ length: 10 }, () => []);
     for (let c = 0; c < 10; c++) {
       let count = c < 4 ? 6 : 5;
-      for (let i = 0; i < count; i++) { columns[c].push(deck.pop()); }
+      for (let i = 0; i < count; i++) {
+        columns[c].push(deck.pop());
+      }
       columns[c][columns[c].length - 1].faceUp = true;
     }
     stockDeck = deck;
   } else if (currentGame === "scorpio") {
     columns = Array.from({ length: 7 }, () => []);
     for (let c = 0; c < 7; c++) {
-      for (let i = 0; i < 4; i++) { columns[c].push(deck.pop()); }
+      for (let i = 0; i < 4; i++) {
+        columns[c].push(deck.pop());
+      }
       columns[c][columns[c].length - 1].faceUp = true;
     }
     stockDeck = deck;
   }
 
-  selectedCol = -1; selectedIdx = -1; moveHistory = [];
-  drawTable(); updateInfo(`${currentGame === "spider" ? "Spider" : "Scorpio"} alkanut siemenellä: "${seed}"`);
+  selectedCol = -1;
+  selectedIdx = -1;
+  moveHistory = [];
+  alert("Kortit jaettu, sarakkeissa on: " + columns.length + " saraketta");
+  drawTable();
+  updateInfo(`${currentGame === "spider" ? "Spider" : "Scorpio"} alkanut siemenellä: "${seed}"`);
 }
 
 function drawTable() {
+  alert("Piirretään pöytä...");
   const table = document.getElementById("table");
   table.innerHTML = "";
   columns.forEach((col, cIdx) => {
@@ -118,16 +122,22 @@ function drawTable() {
     col.forEach((card, rIdx) => {
       let cardDiv = document.createElement("div");
       cardDiv.className = "card" + (!card.faceUp ? " face-down" : "");
-      if (cIdx === selectedCol && rIdx >= selectedIdx) cardDiv.classList.add("selected");
+      if (cIdx === selectedCol && rIdx >= selectedIdx) {
+        cardDiv.classList.add("selected");
+      }
       if (card.faceUp) {
         const suitSymbols = ["♠", "♣", "♦", "♥"];
         cardDiv.innerHTML = `<div style="text-align:left">${getRankName(card.rank)}</div><div style="text-align:right; font-size:1.2em; margin-top:auto">${suitSymbols[card.suit]}</div>`;
-        cardDiv.onclick = (e) => { e.stopPropagation(); handleCardClick(cIdx, rIdx); };
+        cardDiv.onclick = (e) => {
+          e.stopPropagation();
+          handleCardClick(cIdx, rIdx);
+        };
       }
       colDiv.appendChild(cardDiv);
     });
     table.appendChild(colDiv);
   });
+  alert("Kortit lisätty DOM-puuhun, kortteja yhteensä: " + document.querySelectorAll('.card').length);
 }
 
 function handleCardClick(cIdx, rIdx) {
@@ -189,4 +199,4 @@ function updateInfo(msg) { document.getElementById("info").innerText = msg; }
 newGame();
 </script>
 </body>
-</html> 
+</html>
