@@ -1,194 +1,261 @@
 <!DOCTYPE html>
 <html lang="fi">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Walking Scorpio</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scorpio PRO Duel</title>
+<script src="https://cdn.jsdelivr.net/npm/seedrandom@3.0.5/seedrandom.min.js"></script>
 
-  <style>
-    :root { --card-aspect-ratio: 1.35; --bg: #072b22; --accent: #1e6b54; --text-light: #78ffc8; }
-    body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; padding: 10px; margin: 0; user-select: none; }
-
-    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px; }
-    .pill { background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 20px; font-weight: bold; font-size: 13px; border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; gap: 5px; }
-
-    .controls { margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 8px; }
-    button { padding: 10px 14px; cursor: pointer; background: var(--accent); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; font-weight: bold; }
-
-    #info { margin-bottom: 15px; padding: 12px; background: rgba(0,0,0,0.4); border-radius: 8px; font-size: 14px; border-left: 5px solid var(--text-light); min-height: 1.2em; }
-
-    #table { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 900px; margin: 0 auto 30px; min-height: 400px; }
-    .column { background: rgba(255,255,255,0.03); border-radius: 4px; min-height: 60vh; position: relative; padding-bottom: 60px; border: 1px dashed rgba(255,255,255,0.05); }
-
-    .card { background: white; border: 1px solid #222; border-radius: 5px; padding: 4px; margin-bottom: -36px; aspect-ratio: 1 / var(--card-aspect-ratio); font-size: 16px; font-weight: bold; cursor: pointer; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.4); display: flex; flex-direction: column; box-sizing: border-box; color: black; }
-
-    .suit-spade { color: #000000; }
-    .suit-club { color: #5a5a5a; }
-    .suit-heart { color: #d32f2f; }
-    .suit-diamond { color: #e67e22; }
-
-    .mini-suit { font-size: 0.75em; margin-left: 2px; vertical-align: middle; }
-    .card-suit-large { position: absolute; bottom: 2px; right: 4px; font-size: 1.6em; opacity: 0.8; }
-
-    .card.face-down { background: #134537; color: transparent; border: 1px solid rgba(255,255,255,0.1); }
-    .card.selected { outline: 4px solid #ffeb3b; z-index: 100; transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.5); }
-
-    footer { margin-top: 40px; padding: 20px; opacity: 0.6; font-size: 12px; border-top: 1px solid var(--accent); text-align: center; }
-  </style>
+<style>
+body { margin:0; font-family:sans-serif; background:#0d4a3a; color:white; }
+header { padding:10px; display:flex; flex-direction:column; gap:6px; }
+.controls { display:flex; flex-wrap:wrap; gap:6px; }
+button,input { padding:8px; border-radius:6px; border:none; font-weight:bold; }
+button { background:#2a8b6f; color:white; }
+#table { display:flex; justify-content:center; gap:8px; padding:10px; }
+.column { width:70px; }
+.card {
+  height:90px;
+  margin-top:-60px;
+  border-radius:6px;
+  background:white;
+  color:black;
+  padding:5px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+.card:first-child { margin-top:0; }
+.face-down { background:#1a5f4a; color:transparent; }
+.selected { outline:3px solid yellow; }
+.red { color:red; }
+#panel { padding:8px; font-size:14px; }
+</style>
 </head>
+
 <body>
 
-<div class="header-row">
-    <h2 style="margin:0; color:var(--text-light);">🦂 Walking Scorpio</h2>
-    <div class="status-group" style="display:flex; gap:8px;">
-        <div class="pill">🔄 Tehdyt siirrot: <span id="actualMovesUI">0</span></div>
-    </div>
+<header>
+<div class="controls">
+  <input id="player" placeholder="nimi">
+  <input id="seedInput" placeholder="seed">
+  <button onclick="newGame()">Uusi</button>
+  <button onclick="createChallenge()">Haaste</button>
 </div>
 
 <div class="controls">
-  <button onclick="newGame()">Uusi peli</button>
-  <button id="stockBtn" onclick="dealStock()">VARA (3)</button>
-  <button onclick="undoMove()" style="background: #444;">Peru</button>
+  <input id="challengeInput" placeholder="koodi">
+  <button onclick="loadChallenge()">Liity</button>
 </div>
 
-<div id="info">Ladataan...</div>
+<div id="panel"></div>
+</header>
+
 <div id="table"></div>
 
-<footer>&copy; 2026 Walking Games - Itsmyid Oy</footer>
-
 <script>
-let deck = [], columns = [[],[],[],[],[],[],[]], stock = [], moveHistory = [];
-let selectedCol = -1, selectedIdx = -1, actualMovesCount = 0;
+const suits=["♠","♣","♦","♥"];
 
-function init() { newGame(); }
+let columns=[], selected=null;
+let moves=0, startTime=0, timer;
+let opponent=null;
+let round=1;
 
-function newGame() {
-    deck = [];
-    const suits = ['♠', '♣', '♥', '♦'];
-    for (let s of suits) for (let r = 1; r <= 13; r++) deck.push({ rank: r, suit: s, faceUp: false });
-    deck.sort(() => Math.random() - 0.5);
+let stats = JSON.parse(localStorage.getItem("scorpio_stats")||"{}");
+if(!stats.rating) stats={games:0,wins:0,time:0,best:9999,rating:1000};
 
-    columns = [[],[],[],[],[],[],[]];
-    for (let i = 0; i < 49; i++) {
-        let c = i % 7;
-        let card = deck.pop();
-        card.faceUp = !(c < 3 && columns[c].length < 3);
-        columns[c].push(card);
+function saveStats(){ localStorage.setItem("scorpio_stats",JSON.stringify(stats)); }
+
+function startTimer(){
+  startTime=Date.now();
+  clearInterval(timer);
+  timer=setInterval(updatePanel,1000);
+}
+
+function updatePanel(){
+  let t=Math.floor((Date.now()-startTime)/1000);
+  document.getElementById("panel").innerHTML =
+    `⏱ ${t}s | 🔁 ${moves} | 🎯 Rating ${stats.rating}<br>
+     🏆 BO5: ${stats.wins}-${stats.games-stats.wins} (round ${round}/5)<br>
+     📊 Avg: ${stats.games?Math.floor(stats.time/stats.games):0}s | Best: ${stats.best}s`;
+}
+
+function newDeck(seed){
+  Math.seedrandom(seed);
+  let deck=[];
+  for(let s=0;s<4;s++){
+    for(let r=1;r<=13;r++){
+      deck.push({s,r,up:true});
     }
-
-    stock = deck;
-    selectedCol = -1; selectedIdx = -1; actualMovesCount = 0; moveHistory = [];
-    document.getElementById("info").innerText = "Peli valmis! Onnea matkaan.";
-    updateUI();
+  }
+  for(let i=deck.length-1;i>0;i--){
+    let j=Math.floor(Math.random()*(i+1));
+    [deck[i],deck[j]]=[deck[j],deck[i]];
+  }
+  return deck;
 }
 
-function updateUI() {
-    drawTable();
-    document.getElementById("stockBtn").innerText = `VARA (${stock.length})`;
-    document.getElementById("actualMovesUI").innerText = actualMovesCount;
-    checkWin();
+function newGame(){
+  let seed=document.getElementById("seedInput").value || Math.random().toString(36).slice(2);
+  document.getElementById("seedInput").value=seed;
+
+  let deck=newDeck(seed);
+  columns=Array.from({length:7},()=>[]);
+
+  for(let i=0;i<7;i++){
+    for(let j=0;j<7;j++){
+      let card=deck.pop();
+      card.up = !(i<3 && j<3);
+      columns[i].push(card);
+    }
+  }
+
+  moves=0;
+  startTimer();
+  draw();
+
+  let diff = difficulty(columns);
+  document.getElementById("panel").innerHTML += `<br>⭐ Vaikeus: ${diff}/5`;
 }
 
-function drawTable() {
-    const table = document.getElementById("table");
-    table.innerHTML = "";
-    columns.forEach((col, cIdx) => {
-        let colDiv = document.createElement("div");
-        colDiv.className = "column";
-        colDiv.onclick = () => handleColumnClick(cIdx);
-        col.forEach((card, rIdx) => {
-            let cardDiv = document.createElement("div");
-            cardDiv.className = "card" + (!card.faceUp ? " face-down" : "");
-            if (cIdx === selectedCol && rIdx >= selectedIdx) cardDiv.classList.add("selected");
-            if (card.faceUp) {
-                cardDiv.classList.add(getSuitClass(card.suit));
-                cardDiv.innerHTML = `<div>${getRankName(card.rank)}<span class="mini-suit">${card.suit}</span></div><div class="card-suit-large">${card.suit}</div>`;
-                cardDiv.onclick = (e) => { e.stopPropagation(); handleCardClick(cIdx, rIdx); };
-            }
-            colDiv.appendChild(cardDiv);
-        });
-        table.appendChild(colDiv);
+function difficulty(cols){
+  let score=0;
+
+  cols.forEach(col=>{
+    for(let i=0;i<col.length-1;i++){
+      if(col[i].r === col[i+1].r+1) score++;
+      if(!col[i].up) score-=2;
+    }
+  });
+
+  score = Math.max(1, Math.min(5, Math.floor(score/10)));
+  return score;
+}
+
+function draw(){
+  const table=document.getElementById("table");
+  table.innerHTML="";
+
+  columns.forEach((col,ci)=>{
+    let div=document.createElement("div");
+    div.className="column";
+
+    col.forEach((card,ri)=>{
+      let c=document.createElement("div");
+      c.className="card";
+
+      if(!card.up) c.classList.add("face-down");
+
+      if(selected && selected.c===ci && ri>=selected.r){
+        c.classList.add("selected");
+      }
+
+      if(card.up){
+        c.innerHTML=`<div>${rank(card.r)}</div><div class="${card.s>=2?'red':''}">${suits[card.s]}</div>`;
+      }
+
+      c.onclick=(e)=>{ e.stopPropagation(); clickCard(ci,ri); };
+
+      div.appendChild(c);
     });
+
+    div.onclick=()=>move(ci);
+    table.appendChild(div);
+  });
 }
 
-function handleCardClick(cIdx, rIdx) {
-    if (selectedCol !== -1 && selectedCol !== cIdx) { handleColumnClick(cIdx); return; }
-    if (selectedCol === cIdx && selectedIdx === rIdx) { selectedCol = -1; selectedIdx = -1; }
-    else { selectedCol = cIdx; selectedIdx = rIdx; }
-    drawTable();
+function rank(r){ return {1:"A",11:"J",12:"Q",13:"K"}[r]||r; }
+
+function clickCard(c,r){
+  let col=columns[c];
+  for(let i=r;i<col.length-1;i++){
+    if(col[i].r!==col[i+1].r+1) return;
+  }
+  selected = (selected && selected.c===c && selected.r===r) ? null : {c,r};
+  draw();
 }
 
-function handleColumnClick(targetCol) {
-    if (selectedCol === -1) return;
-    const movingCard = columns[selectedCol][selectedIdx];
-    const targetColCards = columns[targetCol];
-    let canMove = false;
-    let shouldCountMove = false;
+function move(target){
+  if(!selected) return;
 
-    if (targetColCards.length === 0) {
-        if (movingCard.rank === 13) {
-            canMove = true;
-            if (selectedIdx !== 0) shouldCountMove = true;
-        }
-    } else {
-        const lastCard = targetColCards[targetColCards.length - 1];
-        if (lastCard.rank === movingCard.rank + 1 && lastCard.suit === movingCard.suit) {
-            canMove = true;
-            shouldCountMove = true;
-        }
+  let from=columns[selected.c];
+  let to=columns[target];
+  let moving=from.slice(selected.r);
+
+  if(to.length===0 || to[to.length-1].r===moving[0].r+1){
+    columns[target]=to.concat(moving);
+    columns[selected.c]=from.slice(0,selected.r);
+
+    if(columns[selected.c].length){
+      columns[selected.c][columns[selected.c].length-1].up=true;
     }
 
-    if (canMove && selectedCol !== targetCol) {
-        moveHistory.push(JSON.parse(JSON.stringify({cols: columns, stock: stock, moves: actualMovesCount})));
-        if (shouldCountMove) actualMovesCount++;
-        const cardsToMove = columns[selectedCol].splice(selectedIdx);
-        columns[targetCol] = [...columns[targetCol], ...cardsToMove];
-        if (columns[selectedCol].length > 0) columns[selectedCol][columns[selectedCol].length - 1].faceUp = true;
-        checkSequence(targetCol);
-    }
-    selectedCol = -1; selectedIdx = -1; updateUI();
+    moves++;
+  }
+
+  selected=null;
+  draw();
+  checkWin();
 }
 
-function checkSequence(cIdx) {
-    const col = columns[cIdx];
-    if (col.length < 13) return;
-    for (let i = 0; i <= col.length - 13; i++) {
-        let sub = col.slice(i, i + 13);
-        if (sub.every((c, idx) => c.faceUp && c.rank === (13 - idx) && c.suit === sub[0].suit)) {
-            col.splice(i, 13);
-            if (col.length > 0) col[col.length - 1].faceUp = true;
-            break;
-        }
-    }
+function updateRating(win){
+  let change = win ? 15 : -10;
+  stats.rating += change;
 }
 
-function checkWin() {
-    if (columns.every(col => col.length === 0) && stock.length === 0) {
-        document.getElementById("info").innerHTML = "<span style='color:#78ffc8; font-size: 18px; font-weight: bold;'>🎉 Onneksi olkoon! Lauta on tyhjä! 🎉</span>";
+function checkWin(){
+  let win = columns.every(col =>
+    col.length===13 &&
+    col.every((c,i)=> i===0 || col[i-1].r===c.r+1)
+  );
+
+  if(win){
+    clearInterval(timer);
+    let time=Math.floor((Date.now()-startTime)/1000);
+
+    stats.games++;
+    stats.time += time;
+    stats.best = Math.min(stats.best, time);
+
+    let winResult=false;
+
+    if(opponent){
+      winResult = time < opponent.time;
+      if(winResult) stats.wins++;
+      updateRating(winResult);
     }
+
+    saveStats();
+
+    round++;
+    if(round>5){
+      alert(`🏆 BO5 valmis!\nVoitot: ${stats.wins}`);
+      round=1;
+      stats.wins=0;
+      stats.games=0;
+    }
+
+    alert(`🎉 ${time}s | Rating: ${stats.rating}`);
+  }
 }
 
-function dealStock() {
-    if (stock.length > 0) {
-        moveHistory.push(JSON.parse(JSON.stringify({cols: columns, stock: stock, moves: actualMovesCount})));
-        for (let i = 0; i < 3; i++) { if(stock.length) { let c = stock.pop(); c.faceUp = true; columns[i].push(c); } }
-        actualMovesCount++;
-        updateUI();
-    }
+function createChallenge(){
+  let seed=document.getElementById("seedInput").value;
+  let time=Math.floor((Date.now()-startTime)/1000);
+  let code=`${seed}|${time}|${moves}`;
+  navigator.clipboard.writeText(code);
+  alert("Kopioitu:\n"+code);
 }
 
-function undoMove() {
-    if (moveHistory.length > 0) {
-        let prev = moveHistory.pop();
-        columns = prev.cols; stock = prev.stock; actualMovesCount = prev.moves || 0;
-        selectedCol = -1; updateUI();
-    }
+function loadChallenge(){
+  let [seed,time,m]=document.getElementById("challengeInput").value.split("|");
+  opponent={time:Number(time), moves:Number(m)};
+  document.getElementById("seedInput").value=seed;
+  newGame();
 }
 
-function getSuitClass(s) { return {'♠':'suit-spade','♣':'suit-club','♥':'suit-heart','♦':'suit-diamond'}[s]; }
-function getRankName(r) { return {1:'A',11:'J',12:'Q',13:'K'}[r] || r; }
-
-window.onload = init;
+newGame();
 </script>
+
 </body>
-</html> 
+</html>
