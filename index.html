@@ -18,8 +18,8 @@
     #info { margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 8px; font-size: 13px; min-height: 1.2em; }
     #table { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; max-width: 1000px; margin: 0 auto; }
     .column { background: rgba(255,255,255,0.03); border-radius: 4px; min-height: 60vh; position: relative; }
-    .card { background: white; color: black; border: 1px solid #333; border-radius: 4px; padding: 4px; margin-bottom: -25px; aspect-ratio: 0.8 / var(--card-aspect-ratio); font-size: 16px; font-weight: bold; cursor: pointer; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; flex-direction: column; box-sizing: border-box; }
-    @media (max-width: 600px) { .card { margin-bottom: -15px; font-size: 12px; } }
+    .card { background: white; color: black; border: 1px solid #333; border-radius: 4px; padding: 4px; margin-bottom: 10px; aspect-ratio: 0.8 / var(--card-aspect-ratio); font-size: 16px; font-weight: bold; cursor: pointer; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; flex-direction: column; box-sizing: border-box; }
+    @media (max-width: 600px) { .card { margin-bottom: 5px; font-size: 12px; } }
     .card.face-down { background: #1a5f4a; color: transparent; border: 1px solid rgba(255,255,255,0.2); }
     .card.selected { outline: 3px solid #ffeb3b; z-index: 100; transform: translateY(-4px); }
     .game-selector { margin-bottom: 15px; }
@@ -71,7 +71,6 @@ function updateSuits() {
 
 function newGame() {
   const seed = document.getElementById("seedInput").value || Math.random().toString(36).substring(2);
-  alert("Peli aloitetaan siemenellä: " + seed);
   Math.seedrandom(seed);
 
   let deck = [];
@@ -89,7 +88,9 @@ function newGame() {
       for (let i = 0; i < count; i++) {
         columns[c].push(deck.pop());
       }
-      columns[c][columns[c].length - 1].faceUp = true;
+      if (columns[c].length > 0) {
+        columns[c][columns[c].length - 1].faceUp = true;
+      }
     }
     stockDeck = deck;
   } else if (currentGame === "scorpio") {
@@ -98,7 +99,9 @@ function newGame() {
       for (let i = 0; i < 4; i++) {
         columns[c].push(deck.pop());
       }
-      columns[c][columns[c].length - 1].faceUp = true;
+      if (columns[c].length > 0) {
+        columns[c][columns[c].length - 1].faceUp = true;
+      }
     }
     stockDeck = deck;
   }
@@ -106,13 +109,11 @@ function newGame() {
   selectedCol = -1;
   selectedIdx = -1;
   moveHistory = [];
-  alert("Kortit jaettu, sarakkeissa on: " + columns.length + " saraketta");
   drawTable();
   updateInfo(`${currentGame === "spider" ? "Spider" : "Scorpio"} alkanut siemenellä: "${seed}"`);
 }
 
 function drawTable() {
-  alert("Piirretään pöytä...");
   const table = document.getElementById("table");
   table.innerHTML = "";
   columns.forEach((col, cIdx) => {
@@ -137,7 +138,6 @@ function drawTable() {
     });
     table.appendChild(colDiv);
   });
-  alert("Kortit lisätty DOM-puuhun, kortteja yhteensä: " + document.querySelectorAll('.card').length);
 }
 
 function handleCardClick(cIdx, rIdx) {
