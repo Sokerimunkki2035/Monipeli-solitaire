@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scorpio Duel</title>
+<title>Scorpio Solitaire</title>
 
 <script src="https://cdn.jsdelivr.net/npm/seedrandom@3.0.5/seedrandom.min.js"></script>
 
@@ -18,14 +18,8 @@ body {
 header {
   padding:10px;
   display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-
-.controls {
-  display:flex;
-  flex-wrap:wrap;
   gap:6px;
+  flex-wrap:wrap;
 }
 
 button,input {
@@ -37,7 +31,7 @@ button,input {
 
 button { background:#2a8b6f; color:white; }
 
-#panel { font-size:14px; }
+#info { padding:10px; }
 
 #table {
   display:flex;
@@ -46,20 +40,16 @@ button { background:#2a8b6f; color:white; }
   padding:10px;
 }
 
-.column {
-  width:70px;
-}
+.column { width:70px; }
 
-/* kortit */
 .card {
   height:90px;
   margin-top:-65px;
   border-radius:6px;
   background:white;
   color:black;
-  padding:6px;
-  font-weight:bold;
   position:relative;
+  padding:6px;
   box-shadow:0 2px 5px rgba(0,0,0,0.4);
   cursor:pointer;
 }
@@ -72,22 +62,10 @@ button { background:#2a8b6f; color:white; }
   cursor:default;
 }
 
-.selected {
-  outline:3px solid yellow;
-}
+.selected { outline:3px solid yellow; }
 
-.card .top {
-  position:absolute;
-  top:4px;
-  left:6px;
-}
-
-.card .bottom {
-  position:absolute;
-  bottom:4px;
-  right:6px;
-  font-size:18px;
-}
+.top { position:absolute; top:4px; left:6px; }
+.bottom { position:absolute; bottom:4px; right:6px; font-size:18px; }
 
 .red { color:red; }
 
@@ -97,23 +75,12 @@ button { background:#2a8b6f; color:white; }
 <body>
 
 <header>
-
-<div class="controls">
-  <input id="player" placeholder="nimi">
-  <input id="seedInput" placeholder="seed">
-  <button onclick="newGame()">Uusi</button>
-  <button onclick="createChallenge()">Haaste</button>
-</div>
-
-<div class="controls">
-  <input id="challengeInput" placeholder="koodi">
-  <button onclick="loadChallenge()">Liity</button>
-</div>
-
-<div id="panel"></div>
-
+<input id="seedInput" placeholder="seed">
+<button onclick="newGame()">Uusi peli</button>
+<button onclick="dealStock()">Jaa varapakasta</button>
 </header>
 
+<div id="info"></div>
 <div id="table"></div>
 
 <script>
@@ -122,40 +89,14 @@ const suits=["♠","♣","♦","♥"];
 
 let columns=[];
 let selected=null;
+let stock=[];
+let stockDeals=0;
 
-let moves=0;
-let startTime=0;
-let timer;
-
-let opponent=null;
-let round=1;
-
-let stats = JSON.parse(localStorage.getItem("scorpio_stats")||"{}");
-if(!stats.rating) stats={games:0,wins:0,time:0,best:9999,rating:1000};
-
-function saveStats(){
-  localStorage.setItem("scorpio_stats",JSON.stringify(stats));
-}
-
-function startTimer(){
-  startTime=Date.now();
-  clearInterval(timer);
-  timer=setInterval(updatePanel,1000);
-}
-
-function updatePanel(){
-  let t=Math.floor((Date.now()-startTime)/1000);
-
-  document.getElementById("panel").innerHTML =
-    `⏱ ${t}s | 🔁 ${moves} | 🎯 ${stats.rating}<br>
-     🏆 BO5: ${stats.wins}-${stats.games-stats.wins} (round ${round}/5)<br>
-     📊 Avg: ${stats.games?Math.floor(stats.time/stats.games):0}s | Best: ${stats.best}s`;
-}
-
+/* ===== PAKKA ===== */
 function newDeck(seed){
   Math.seedrandom(seed);
-
   let deck=[];
+
   for(let s=0;s<4;s++){
     for(let r=1;r<=13;r++){
       deck.push({s,r,up:true});
@@ -170,6 +111,7 @@ function newDeck(seed){
   return deck;
 }
 
+/* ===== UUSI PELI ===== */
 function newGame(){
   let seed=document.getElementById("seedInput").value || Math.random().toString(36).slice(2);
   document.getElementById("seedInput").value=seed;
@@ -178,21 +120,26 @@ function newGame(){
 
   columns=Array.from({length:7},()=>[]);
 
-  for(let i=0;i<7;i++){
-    for(let j=0;j<7;j++){
+  for(let c=0;c<7;c++){
+    for(let r=0;r<7;r++){
       let card=deck.pop();
-      card.up = !(i<3 && j<3);
-      columns[i].push(card);
+
+      // 3 ekaa saraketta: 3 alinta piilossa
+      card.up = !(c<3 && r<3);
+
+      columns[c].push(card);
     }
   }
 
+  stock = deck;
+  stockDeals = 0;
   selected=null;
-  moves=0;
 
-  startTimer();
   draw();
+  info("Peli aloitettu");
 }
 
+/* ===== PIIRTO ===== */
 function draw(){
   const table=document.getElementById("table");
   table.innerHTML="";
@@ -212,7 +159,7 @@ function draw(){
       }
 
       if(card.up){
-        c.innerHTML = `
+        c.innerHTML=`
           <div class="top ${card.s>=2?'red':''}">
             ${rank(card.r)}${suits[card.s]}
           </div>
@@ -224,37 +171,25 @@ function draw(){
 
       c.onclick=(e)=>{
         e.stopPropagation();
-        clickCard(ci,ri);
+        select(ci,ri);
       };
 
       div.appendChild(c);
     });
 
     div.onclick=()=>move(ci);
-
     table.appendChild(div);
   });
 }
 
+/* ===== APU ===== */
 function rank(r){
   return {1:"A",11:"J",12:"Q",13:"K"}[r]||r;
 }
 
-/* 🔥 KORJATTU VALINTA */
-function clickCard(c,r){
-  let col=columns[c];
-
-  if(!col[r].up) return;
-
-  // kaikki kortit pinossa pitää olla näkyvissä
-  for(let i=r;i<col.length;i++){
-    if(!col[i].up) return;
-  }
-
-  // pitää olla laskeva järjestys
-  for(let i=r;i<col.length-1;i++){
-    if(col[i].r !== col[i+1].r+1) return;
-  }
+/* ===== VALINTA ===== */
+function select(c,r){
+  if(!columns[c][r].up) return;
 
   selected = (selected && selected.c===c && selected.r===r)
     ? null
@@ -263,89 +198,70 @@ function clickCard(c,r){
   draw();
 }
 
-/* 🔥 KORJATTU MOVE */
+/* ===== SIIRTO ===== */
 function move(target){
   if(!selected) return;
 
   let from=columns[selected.c];
   let to=columns[target];
   let moving=from.slice(selected.r);
+  let first=moving[0];
 
   let valid =
-    to.length === 0 ||
-    (to[to.length-1].up && to[to.length-1].r === moving[0].r+1);
+    (to.length === 0 && first.r === 13) || // vain K tyhjään
+    (to.length > 0 && to[to.length-1].r === first.r + 1);
 
   if(valid){
-    columns[target] = to.concat(moving);
-    columns[selected.c] = from.slice(0,selected.r);
+    columns[target]=to.concat(moving);
+    columns[selected.c]=from.slice(0,selected.r);
 
     if(columns[selected.c].length){
-      columns[selected.c][columns[selected.c].length-1].up = true;
+      columns[selected.c][columns[selected.c].length-1].up=true;
     }
 
-    moves++;
+    checkWin();
   }
 
   selected=null;
   draw();
-  checkWin();
 }
 
-function updateRating(win){
-  stats.rating += win ? 15 : -10;
+/* ===== VARAPAKKA ===== */
+function dealStock(){
+  if(stockDeals >= 3){
+    info("Varapakka käytetty");
+    return;
+  }
+
+  for(let i=0;i<7;i++){
+    if(stock.length){
+      let card=stock.pop();
+      card.up=true;
+      columns[i].push(card);
+    }
+  }
+
+  stockDeals++;
+  draw();
 }
 
+/* ===== VOITTO ===== */
 function checkWin(){
-  let win = columns.every(col =>
-    col.length===13 &&
-    col.every((c,i)=> i===0 || col[i-1].r===c.r+1)
+  let complete = columns.filter(col =>
+    col.length>=13 &&
+    col.slice(-13).every((c,i,arr)=>
+      i===0 || arr[i-1].r === c.r+1
+    )
   );
 
-  if(win){
-    clearInterval(timer);
-
-    let time=Math.floor((Date.now()-startTime)/1000);
-
-    stats.games++;
-    stats.time += time;
-    stats.best = Math.min(stats.best, time);
-
-    let winResult=false;
-
-    if(opponent){
-      winResult = time < opponent.time;
-      if(winResult) stats.wins++;
-      updateRating(winResult);
-    }
-
-    saveStats();
-
-    round++;
-
-    if(round>5){
-      alert(`🏆 BO5 valmis!\nVoitot: ${stats.wins}`);
-      round=1;
-      stats.wins=0;
-      stats.games=0;
-    }
-
-    alert(`🎉 ${time}s | Rating ${stats.rating}`);
+  if(complete.length===4){
+    info("🎉 Voitit pelin!");
   }
 }
 
-function createChallenge(){
-  let seed=document.getElementById("seedInput").value;
-  let time=Math.floor((Date.now()-startTime)/1000);
-  let code=`${seed}|${time}|${moves}`;
-  navigator.clipboard.writeText(code);
-  alert("Kopioitu:\n"+code);
-}
-
-function loadChallenge(){
-  let [seed,time,m]=document.getElementById("challengeInput").value.split("|");
-  opponent={time:Number(time), moves:Number(m)};
-  document.getElementById("seedInput").value=seed;
-  newGame();
+/* ===== INFO ===== */
+function info(msg){
+  document.getElementById("info").innerText=msg;
 }
 
 newGame();
@@ -353,4 +269,4 @@ newGame();
 </script>
 
 </body>
-</html>
+</html> 
