@@ -2,271 +2,245 @@
 <html lang="fi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scorpio Solitaire</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Scorpio Duel</title>
 <script src="https://cdn.jsdelivr.net/npm/seedrandom@3.0.5/seedrandom.min.js"></script>
-
 <style>
-body {
-  margin:0;
-  font-family:sans-serif;
-  background:#0d4a3a;
-  color:white;
-}
+  body { margin:0; font-family:sans-serif; background:#0d4a3a; color:white; overflow:hidden; touch-action:manipulation; }
+  header { background:#0a3a2d; padding:10px; display:flex; justify-content:space-between; align-items:center; font-size:14px; border-bottom:2px solid #1a5f4a; }
+  
+  #stats-bar { background:rgba(0,0,0,0.2); padding:5px 10px; display:flex; justify-content:space-around; font-size:12px; }
+  
+  #table { display:flex; justify-content:center; gap:4px; padding:10px; margin-top:10px; }
+  .column { width:13%; min-height:70vh; }
+  
+  .card { 
+    height:75px; width:100%; margin-top:-55px; border-radius:4px; 
+    background:white; color:black; position:relative; padding:4px; 
+    box-shadow:0 1px 3px rgba(0,0,0,0.5); font-size:11px; border:1px solid #999;
+    box-sizing: border-box;
+  }
+  .card:first-child { margin-top:0; }
+  .face-down { background:#1a5f4a; border:1px solid #0d4a3a; color:transparent; }
+  .selected { border:3px solid #f1c40f; transform: translateY(-5px); z-index:100; }
+  
+  .red { color:#e74c3c; }
+  .suit-icon { font-size:16px; position:absolute; bottom:2px; right:4px; }
+  .rank-text { font-weight:bold; }
 
-header {
-  padding:10px;
-  display:flex;
-  gap:6px;
-  flex-wrap:wrap;
-}
-
-button,input {
-  padding:8px;
-  border-radius:6px;
-  border:none;
-  font-weight:bold;
-}
-
-button { background:#2a8b6f; color:white; }
-
-#info { padding:10px; }
-
-#table {
-  display:flex;
-  justify-content:center;
-  gap:8px;
-  padding:10px;
-}
-
-.column { width:70px; }
-
-.card {
-  height:90px;
-  margin-top:-65px;
-  border-radius:6px;
-  background:white;
-  color:black;
-  position:relative;
-  padding:6px;
-  box-shadow:0 2px 5px rgba(0,0,0,0.4);
-  cursor:pointer;
-}
-
-.card:first-child { margin-top:0; }
-
-.face-down {
-  background:#1a5f4a;
-  color:transparent;
-  cursor:default;
-}
-
-.selected { outline:3px solid yellow; }
-
-.top { position:absolute; top:4px; left:6px; }
-.bottom { position:absolute; bottom:4px; right:6px; font-size:18px; }
-
-.red { color:red; }
-
+  #controls { position:fixed; bottom:0; width:100%; padding:15px; background:#0a3a2d; display:flex; gap:10px; justify-content:center; }
+  button { padding:12px 20px; border:none; border-radius:6px; font-weight:bold; background:#27ae60; color:white; box-shadow:0 3px 0 #1e8449; }
+  button:active { transform:translateY(2px); box-shadow:none; }
+  
+  #overlay { 
+    position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); 
+    display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; text-align:center;
+  }
+  .hidden { display:none !important; }
 </style>
 </head>
-
 <body>
 
+<div id="overlay">
+  <h1 id="overlay-title">Scorpio Duel</h1>
+  <p id="overlay-desc">Pelaaja 1 aloittaa. Ole nopeampi kuin kaverisi!</p>
+  <button onclick="startTurn()">ALoita vuoro</button>
+</div>
+
 <header>
-<input id="seedInput" placeholder="seed">
-<button onclick="newGame()">Uusi peli</button>
-<button onclick="dealStock()">Jaa varapakasta</button>
+  <div id="turn-label">Pelaaja 1</div>
+  <div id="timer">00:00</div>
 </header>
 
-<div id="info"></div>
+<div id="stats-bar">
+  <div>P1 Voitot: <span id="p1-wins">0</span> (<span id="p1-pct">0</span>%)</div>
+  <div>P2 Voitot: <span id="p2-wins">0</span> (<span id="p2-pct">0</span>%)</div>
+</div>
+
 <div id="table"></div>
 
+<div id="controls">
+  <button style="background:#2980b9; box-shadow:0 3px 0 #1f6391;" onclick="dealStock()">JAA VARAPAKKA</button>
+  <button style="background:#c0392b; box-shadow:0 3px 0 #922b21;" onclick="surrender()">LUOVUTA</button>
+</div>
+
 <script>
+const suits = ["♠", "♣", "♦", "♥"];
+let state = {
+  currentPlayer: 1,
+  p1Time: 0, p2Time: 0,
+  p1Wins: 0, p2Wins: 0, totalGames: 0,
+  currentSeed: "",
+  timerInterval: null,
+  seconds: 0,
+  columns: [],
+  selected: null,
+  stock: [],
+  stockDeals: 0
+};
 
-const suits=["♠","♣","♦","♥"];
+function startTurn() {
+  document.getElementById('overlay').classList.add('hidden');
+  if (state.currentPlayer === 1) {
+    state.currentSeed = Math.random().toString(36).substring(7);
+  }
+  setupBoard(state.currentSeed);
+  startTimer();
+}
 
-let columns=[];
-let selected=null;
-let stock=[];
-let stockDeals=0;
-
-/* ===== PAKKA ===== */
-function newDeck(seed){
+function setupBoard(seed) {
   Math.seedrandom(seed);
-  let deck=[];
+  let deck = [];
+  for(let s=0; s<4; s++) for(let r=1; r<=13; r++) deck.push({s, r, up: true});
+  for(let i=deck.length-1; i>0; i--) {
+    let j = Math.floor(Math.random()*(i+1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
 
-  for(let s=0;s<4;s++){
-    for(let r=1;r<=13;r++){
-      deck.push({s,r,up:true});
+  state.columns = Array.from({length: 7}, () => []);
+  for(let c=0; c<7; c++) {
+    for(let r=0; r<7; r++) {
+      let card = deck.pop();
+      card.up = !(c < 3 && r < 3);
+      state.columns[c].push(card);
     }
   }
-
-  for(let i=deck.length-1;i>0;i--){
-    let j=Math.floor(Math.random()*(i+1));
-    [deck[i],deck[j]]=[deck[j],deck[i]];
-  }
-
-  return deck;
-}
-
-/* ===== UUSI PELI ===== */
-function newGame(){
-  let seed=document.getElementById("seedInput").value || Math.random().toString(36).slice(2);
-  document.getElementById("seedInput").value=seed;
-
-  let deck=newDeck(seed);
-
-  columns=Array.from({length:7},()=>[]);
-
-  for(let c=0;c<7;c++){
-    for(let r=0;r<7;r++){
-      let card=deck.pop();
-
-      // 3 ekaa saraketta: 3 alinta piilossa
-      card.up = !(c<3 && r<3);
-
-      columns[c].push(card);
-    }
-  }
-
-  stock = deck;
-  stockDeals = 0;
-  selected=null;
-
+  state.stock = deck;
+  state.stockDeals = 0;
+  state.selected = null;
   draw();
-  info("Peli aloitettu");
 }
 
-/* ===== PIIRTO ===== */
-function draw(){
-  const table=document.getElementById("table");
-  table.innerHTML="";
+function draw() {
+  const table = document.getElementById("table");
+  table.innerHTML = "";
+  state.columns.forEach((col, ci) => {
+    let colDiv = document.createElement("div");
+    colDiv.className = "column";
+    if (col.length === 0) colDiv.onclick = () => { if(state.selected) move(ci); };
 
-  columns.forEach((col,ci)=>{
-    let div=document.createElement("div");
-    div.className="column";
-
-    col.forEach((card,ri)=>{
-      let c=document.createElement("div");
-      c.className="card";
-
-      if(!card.up) c.classList.add("face-down");
-
-      if(selected && selected.c===ci && ri>=selected.r){
-        c.classList.add("selected");
+    col.forEach((card, ri) => {
+      let cDiv = document.createElement("div");
+      cDiv.className = "card" + (card.up ? "" : " face-down");
+      if (state.selected && state.selected.c === ci && ri >= state.selected.r) cDiv.classList.add("selected");
+      if (card.up) {
+        const isRed = card.s >= 2 ? "red" : "";
+        cDiv.innerHTML = `<div class="rank-text ${isRed}">${rank(card.r)}${suits[card.s]}</div><div class="suit-icon ${isRed}">${suits[card.s]}</div>`;
       }
-
-      if(card.up){
-        c.innerHTML=`
-          <div class="top ${card.s>=2?'red':''}">
-            ${rank(card.r)}${suits[card.s]}
-          </div>
-          <div class="bottom ${card.s>=2?'red':''}">
-            ${suits[card.s]}
-          </div>
-        `;
-      }
-
-      c.onclick=(e)=>{
-        e.stopPropagation();
-        select(ci,ri);
-      };
-
-      div.appendChild(c);
+      cDiv.onclick = (e) => { e.stopPropagation(); handleSelect(ci, ri); };
+      colDiv.appendChild(cDiv);
     });
-
-    div.onclick=()=>move(ci);
-    table.appendChild(div);
+    table.appendChild(colDiv);
   });
 }
 
-/* ===== APU ===== */
-function rank(r){
-  return {1:"A",11:"J",12:"Q",13:"K"}[r]||r;
-}
-
-/* ===== VALINTA ===== */
-function select(c,r){
-  if(!columns[c][r].up) return;
-
-  selected = (selected && selected.c===c && selected.r===r)
-    ? null
-    : {c,r};
-
+function handleSelect(ci, ri) {
+  if (!state.selected) {
+    if (state.columns[ci][ri].up) state.selected = { c: ci, r: ri };
+  } else {
+    if (state.selected.c === ci) state.selected = null;
+    else move(ci);
+  }
   draw();
 }
 
-/* ===== SIIRTO ===== */
-function move(target){
-  if(!selected) return;
+function move(targetCi) {
+  const fromCol = state.columns[state.selected.c];
+  const toCol = state.columns[targetCi];
+  const moving = fromCol.slice(state.selected.r);
+  const first = moving[0];
 
-  let from=columns[selected.c];
-  let to=columns[target];
-  let moving=from.slice(selected.r);
-  let first=moving[0];
+  let valid = (toCol.length === 0) 
+    ? (first.r === 13) 
+    : (toCol[toCol.length-1].r === first.r + 1 && toCol[toCol.length-1].s === first.s);
 
-  let valid =
-    (to.length === 0 && first.r === 13) || // vain K tyhjään
-    (to.length > 0 && to[to.length-1].r === first.r + 1);
-
-  if(valid){
-    columns[target]=to.concat(moving);
-    columns[selected.c]=from.slice(0,selected.r);
-
-    if(columns[selected.c].length){
-      columns[selected.c][columns[selected.c].length-1].up=true;
-    }
-
+  if (valid) {
+    state.columns[targetCi] = toCol.concat(moving);
+    state.columns[state.selected.c] = fromCol.slice(0, state.selected.r);
+    if (state.columns[state.selected.c].length > 0) state.columns[state.selected.c][state.columns[state.selected.c].length-1].up = true;
     checkWin();
   }
-
-  selected=null;
+  state.selected = null;
   draw();
 }
 
-/* ===== VARAPAKKA ===== */
-function dealStock(){
-  if(stockDeals >= 3){
-    info("Varapakka käytetty");
-    return;
+function dealStock() {
+  if (state.stockDeals >= 3) return;
+  for (let i = 0; i < 7; i++) if (state.stock.length) {
+    let c = state.stock.pop(); c.up = true;
+    state.columns[i].push(c);
   }
+  state.stockDeals++;
+  draw();
+}
 
-  for(let i=0;i<7;i++){
-    if(stock.length){
-      let card=stock.pop();
-      card.up=true;
-      columns[i].push(card);
+function checkWin() {
+  let done = 0;
+  state.columns.forEach(col => {
+    for (let i = 0; i <= col.length - 13; i++) {
+      let s = col.slice(i, i + 13);
+      if (s[0].r === 13 && s.every((c, idx) => idx === 0 || (s[idx-1].r === c.r + 1 && s[idx-1].s === c.s))) done++;
     }
+  });
+  if (done === 4) endTurn(false);
+}
+
+function surrender() { endTurn(true); }
+
+function endTurn(isSurrender) {
+  clearInterval(state.timerInterval);
+  let finalTime = isSurrender ? 9999 : state.seconds;
+  
+  if (state.currentPlayer === 1) {
+    state.p1Time = finalTime;
+    state.currentPlayer = 2;
+    showOverlay("Pelaaja 2 vuoro", `Pelaaja 1 sai ajan ${formatTime(state.p1Time)}. Pystytkö parempaan samalla pakalla?`);
+  } else {
+    state.p2Time = finalTime;
+    state.totalGames++;
+    let winner = "";
+    if (state.p1Time < state.p2Time) { state.p1Wins++; winner = "Pelaaja 1 voitti!"; }
+    else if (state.p2Time < state.p1Time) { state.p2Wins++; winner = "Pelaaja 2 voitti!"; }
+    else winner = "Tasapeli!";
+    
+    updateStatsDisplay();
+    state.currentPlayer = 1;
+    showOverlay(winner, `P1: ${formatTime(state.p1Time)} vs P2: ${formatTime(state.p2Time)}`);
   }
-
-  stockDeals++;
-  draw();
 }
 
-/* ===== VOITTO ===== */
-function checkWin(){
-  let complete = columns.filter(col =>
-    col.length>=13 &&
-    col.slice(-13).every((c,i,arr)=>
-      i===0 || arr[i-1].r === c.r+1
-    )
-  );
-
-  if(complete.length===4){
-    info("🎉 Voitit pelin!");
-  }
+function updateStatsDisplay() {
+  document.getElementById('p1-wins').innerText = state.p1Wins;
+  document.getElementById('p2-wins').innerText = state.p2Wins;
+  document.getElementById('p1-pct').innerText = Math.round((state.p1Wins/state.totalGames)*100) || 0;
+  document.getElementById('p2-pct').innerText = Math.round((state.p2Wins/state.totalGames)*100) || 0;
 }
 
-/* ===== INFO ===== */
-function info(msg){
-  document.getElementById("info").innerText=msg;
+function startTimer() {
+  state.seconds = 0;
+  clearInterval(state.timerInterval);
+  state.timerInterval = setInterval(() => {
+    state.seconds++;
+    document.getElementById('timer').innerText = formatTime(state.seconds);
+  }, 1000);
 }
 
-newGame();
+function formatTime(s) {
+  if (s >= 9999) return "DNF";
+  let m = Math.floor(s/60);
+  let sec = s % 60;
+  return (m < 10 ? "0" + m : m) + ":" + (sec < 10 ? "0" + sec : sec);
+}
 
+function showOverlay(title, desc) {
+  document.getElementById('overlay-title').innerText = title;
+  document.getElementById('overlay-desc').innerText = desc;
+  document.getElementById('overlay').classList.remove('hidden');
+  document.getElementById('turn-label').innerText = "Pelaaja " + state.currentPlayer;
+}
+
+function rank(r) { return {1:"A", 11:"J", 12:"Q", 13:"K"}[r] || r; }
 </script>
-
 </body>
-</html> 
+</html>
+ 
