@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scorpio PRO Duel</title>
+<title>Scorpio Duel</title>
 
 <script src="https://cdn.jsdelivr.net/npm/seedrandom@3.0.5/seedrandom.min.js"></script>
 
@@ -50,10 +50,10 @@ button { background:#2a8b6f; color:white; }
   width:70px;
 }
 
-/* 🔥 FIXATTU KORTTI */
+/* kortit */
 .card {
   height:90px;
-  margin-top:-70px;
+  margin-top:-65px;
   border-radius:6px;
   background:white;
   color:black;
@@ -61,22 +61,21 @@ button { background:#2a8b6f; color:white; }
   font-weight:bold;
   position:relative;
   box-shadow:0 2px 5px rgba(0,0,0,0.4);
+  cursor:pointer;
 }
 
-.card:first-child {
-  margin-top:0;
-}
+.card:first-child { margin-top:0; }
 
 .face-down {
   background:#1a5f4a;
   color:transparent;
+  cursor:default;
 }
 
 .selected {
   outline:3px solid yellow;
 }
 
-/* 🔥 näkyvät tekstit */
 .card .top {
   position:absolute;
   top:4px;
@@ -118,10 +117,16 @@ button { background:#2a8b6f; color:white; }
 <div id="table"></div>
 
 <script>
+
 const suits=["♠","♣","♦","♥"];
 
-let columns=[], selected=null;
-let moves=0, startTime=0, timer;
+let columns=[];
+let selected=null;
+
+let moves=0;
+let startTime=0;
+let timer;
+
 let opponent=null;
 let round=1;
 
@@ -140,6 +145,7 @@ function startTimer(){
 
 function updatePanel(){
   let t=Math.floor((Date.now()-startTime)/1000);
+
   document.getElementById("panel").innerHTML =
     `⏱ ${t}s | 🔁 ${moves} | 🎯 ${stats.rating}<br>
      🏆 BO5: ${stats.wins}-${stats.games-stats.wins} (round ${round}/5)<br>
@@ -148,6 +154,7 @@ function updatePanel(){
 
 function newDeck(seed){
   Math.seedrandom(seed);
+
   let deck=[];
   for(let s=0;s<4;s++){
     for(let r=1;r<=13;r++){
@@ -168,6 +175,7 @@ function newGame(){
   document.getElementById("seedInput").value=seed;
 
   let deck=newDeck(seed);
+
   columns=Array.from({length:7},()=>[]);
 
   for(let i=0;i<7;i++){
@@ -178,7 +186,9 @@ function newGame(){
     }
   }
 
+  selected=null;
   moves=0;
+
   startTimer();
   draw();
 }
@@ -212,12 +222,16 @@ function draw(){
         `;
       }
 
-      c.onclick=(e)=>{ e.stopPropagation(); clickCard(ci,ri); };
+      c.onclick=(e)=>{
+        e.stopPropagation();
+        clickCard(ci,ri);
+      };
 
       div.appendChild(c);
     });
 
     div.onclick=()=>move(ci);
+
     table.appendChild(div);
   });
 }
@@ -226,17 +240,30 @@ function rank(r){
   return {1:"A",11:"J",12:"Q",13:"K"}[r]||r;
 }
 
+/* 🔥 KORJATTU VALINTA */
 function clickCard(c,r){
   let col=columns[c];
 
-  for(let i=r;i<col.length-1;i++){
-    if(col[i].r!==col[i+1].r+1) return;
+  if(!col[r].up) return;
+
+  // kaikki kortit pinossa pitää olla näkyvissä
+  for(let i=r;i<col.length;i++){
+    if(!col[i].up) return;
   }
 
-  selected = (selected && selected.c===c && selected.r===r) ? null : {c,r};
+  // pitää olla laskeva järjestys
+  for(let i=r;i<col.length-1;i++){
+    if(col[i].r !== col[i+1].r+1) return;
+  }
+
+  selected = (selected && selected.c===c && selected.r===r)
+    ? null
+    : {c,r};
+
   draw();
 }
 
+/* 🔥 KORJATTU MOVE */
 function move(target){
   if(!selected) return;
 
@@ -244,12 +271,16 @@ function move(target){
   let to=columns[target];
   let moving=from.slice(selected.r);
 
-  if(to.length===0 || to[to.length-1].r===moving[0].r+1){
-    columns[target]=to.concat(moving);
-    columns[selected.c]=from.slice(0,selected.r);
+  let valid =
+    to.length === 0 ||
+    (to[to.length-1].up && to[to.length-1].r === moving[0].r+1);
+
+  if(valid){
+    columns[target] = to.concat(moving);
+    columns[selected.c] = from.slice(0,selected.r);
 
     if(columns[selected.c].length){
-      columns[selected.c][columns[selected.c].length-1].up=true;
+      columns[selected.c][columns[selected.c].length-1].up = true;
     }
 
     moves++;
@@ -272,6 +303,7 @@ function checkWin(){
 
   if(win){
     clearInterval(timer);
+
     let time=Math.floor((Date.now()-startTime)/1000);
 
     stats.games++;
@@ -289,6 +321,7 @@ function checkWin(){
     saveStats();
 
     round++;
+
     if(round>5){
       alert(`🏆 BO5 valmis!\nVoitot: ${stats.wins}`);
       round=1;
@@ -316,7 +349,8 @@ function loadChallenge(){
 }
 
 newGame();
+
 </script>
 
 </body>
-</html> 
+</html>
