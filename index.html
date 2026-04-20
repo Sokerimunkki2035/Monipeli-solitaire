@@ -4,38 +4,101 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Scorpio PRO Duel</title>
+
 <script src="https://cdn.jsdelivr.net/npm/seedrandom@3.0.5/seedrandom.min.js"></script>
 
 <style>
-body { margin:0; font-family:sans-serif; background:#0d4a3a; color:white; }
-header { padding:10px; display:flex; flex-direction:column; gap:6px; }
-.controls { display:flex; flex-wrap:wrap; gap:6px; }
-button,input { padding:8px; border-radius:6px; border:none; font-weight:bold; }
+body {
+  margin:0;
+  font-family:sans-serif;
+  background:#0d4a3a;
+  color:white;
+}
+
+header {
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.controls {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+button,input {
+  padding:8px;
+  border-radius:6px;
+  border:none;
+  font-weight:bold;
+}
+
 button { background:#2a8b6f; color:white; }
-#table { display:flex; justify-content:center; gap:8px; padding:10px; }
-.column { width:70px; }
+
+#panel { font-size:14px; }
+
+#table {
+  display:flex;
+  justify-content:center;
+  gap:8px;
+  padding:10px;
+}
+
+.column {
+  width:70px;
+}
+
+/* 🔥 FIXATTU KORTTI */
 .card {
   height:90px;
-  margin-top:-60px;
+  margin-top:-70px;
   border-radius:6px;
   background:white;
   color:black;
-  padding:5px;
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
+  padding:6px;
+  font-weight:bold;
+  position:relative;
+  box-shadow:0 2px 5px rgba(0,0,0,0.4);
 }
-.card:first-child { margin-top:0; }
-.face-down { background:#1a5f4a; color:transparent; }
-.selected { outline:3px solid yellow; }
+
+.card:first-child {
+  margin-top:0;
+}
+
+.face-down {
+  background:#1a5f4a;
+  color:transparent;
+}
+
+.selected {
+  outline:3px solid yellow;
+}
+
+/* 🔥 näkyvät tekstit */
+.card .top {
+  position:absolute;
+  top:4px;
+  left:6px;
+}
+
+.card .bottom {
+  position:absolute;
+  bottom:4px;
+  right:6px;
+  font-size:18px;
+}
+
 .red { color:red; }
-#panel { padding:8px; font-size:14px; }
+
 </style>
 </head>
 
 <body>
 
 <header>
+
 <div class="controls">
   <input id="player" placeholder="nimi">
   <input id="seedInput" placeholder="seed">
@@ -49,6 +112,7 @@ button { background:#2a8b6f; color:white; }
 </div>
 
 <div id="panel"></div>
+
 </header>
 
 <div id="table"></div>
@@ -64,7 +128,9 @@ let round=1;
 let stats = JSON.parse(localStorage.getItem("scorpio_stats")||"{}");
 if(!stats.rating) stats={games:0,wins:0,time:0,best:9999,rating:1000};
 
-function saveStats(){ localStorage.setItem("scorpio_stats",JSON.stringify(stats)); }
+function saveStats(){
+  localStorage.setItem("scorpio_stats",JSON.stringify(stats));
+}
 
 function startTimer(){
   startTime=Date.now();
@@ -75,7 +141,7 @@ function startTimer(){
 function updatePanel(){
   let t=Math.floor((Date.now()-startTime)/1000);
   document.getElementById("panel").innerHTML =
-    `⏱ ${t}s | 🔁 ${moves} | 🎯 Rating ${stats.rating}<br>
+    `⏱ ${t}s | 🔁 ${moves} | 🎯 ${stats.rating}<br>
      🏆 BO5: ${stats.wins}-${stats.games-stats.wins} (round ${round}/5)<br>
      📊 Avg: ${stats.games?Math.floor(stats.time/stats.games):0}s | Best: ${stats.best}s`;
 }
@@ -88,10 +154,12 @@ function newDeck(seed){
       deck.push({s,r,up:true});
     }
   }
+
   for(let i=deck.length-1;i>0;i--){
     let j=Math.floor(Math.random()*(i+1));
     [deck[i],deck[j]]=[deck[j],deck[i]];
   }
+
   return deck;
 }
 
@@ -113,23 +181,6 @@ function newGame(){
   moves=0;
   startTimer();
   draw();
-
-  let diff = difficulty(columns);
-  document.getElementById("panel").innerHTML += `<br>⭐ Vaikeus: ${diff}/5`;
-}
-
-function difficulty(cols){
-  let score=0;
-
-  cols.forEach(col=>{
-    for(let i=0;i<col.length-1;i++){
-      if(col[i].r === col[i+1].r+1) score++;
-      if(!col[i].up) score-=2;
-    }
-  });
-
-  score = Math.max(1, Math.min(5, Math.floor(score/10)));
-  return score;
 }
 
 function draw(){
@@ -151,7 +202,14 @@ function draw(){
       }
 
       if(card.up){
-        c.innerHTML=`<div>${rank(card.r)}</div><div class="${card.s>=2?'red':''}">${suits[card.s]}</div>`;
+        c.innerHTML = `
+          <div class="top ${card.s>=2?'red':''}">
+            ${rank(card.r)}${suits[card.s]}
+          </div>
+          <div class="bottom ${card.s>=2?'red':''}">
+            ${suits[card.s]}
+          </div>
+        `;
       }
 
       c.onclick=(e)=>{ e.stopPropagation(); clickCard(ci,ri); };
@@ -164,13 +222,17 @@ function draw(){
   });
 }
 
-function rank(r){ return {1:"A",11:"J",12:"Q",13:"K"}[r]||r; }
+function rank(r){
+  return {1:"A",11:"J",12:"Q",13:"K"}[r]||r;
+}
 
 function clickCard(c,r){
   let col=columns[c];
+
   for(let i=r;i<col.length-1;i++){
     if(col[i].r!==col[i+1].r+1) return;
   }
+
   selected = (selected && selected.c===c && selected.r===r) ? null : {c,r};
   draw();
 }
@@ -199,8 +261,7 @@ function move(target){
 }
 
 function updateRating(win){
-  let change = win ? 15 : -10;
-  stats.rating += change;
+  stats.rating += win ? 15 : -10;
 }
 
 function checkWin(){
@@ -235,7 +296,7 @@ function checkWin(){
       stats.games=0;
     }
 
-    alert(`🎉 ${time}s | Rating: ${stats.rating}`);
+    alert(`🎉 ${time}s | Rating ${stats.rating}`);
   }
 }
 
@@ -258,4 +319,4 @@ newGame();
 </script>
 
 </body>
-</html>
+</html> 
