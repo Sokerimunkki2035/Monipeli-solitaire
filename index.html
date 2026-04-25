@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Fixed Controls</title>
+    <title>Itsmyid Arena - Smart Stack Fix</title>
     <style>
         :root { --card-width: 32px; --card-height: 48px; --green: #1b5e20; }
         body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
-        #ui-layer { background: rgba(0,0,0,0.9); padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; z-index: 1000; }
+        #ui-layer { background: rgba(0,0,0,0.9); padding: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; z-index: 1000; }
         .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; }
         .stat-box { background: #333; padding: 4px; border-radius: 4px; text-align: center; font-size: 0.8em; }
         .stats-summary { grid-column: span 2; text-align: center; font-size: 0.8em; color: gold; }
         #game-board { display: flex; justify-content: center; gap: 2px; padding: 10px 2px; flex-grow: 1; }
-        .column { width: var(--card-width); height: 100%; background: rgba(255,255,255,0.05); position: relative; border-radius: 4px; }
-        .card { width: var(--card-width); height: var(--card-height); background: white; border-radius: 2px; position: absolute; color: black; box-shadow: 0 1px 3px rgba(0,0,0,0.4); display: flex; flex-direction: column; align-items: center; padding-top: 2px; font-weight: bold; font-size: 0.9em; border: 0.5px solid #666; box-sizing: border-box; pointer-events: none; }
+        .column { width: var(--card-width); height: 100%; background: rgba(255,255,255,0.05); position: relative; }
+        .card { width: var(--card-width); height: var(--card-height); background: white; border-radius: 2px; position: absolute; color: black; box-shadow: 0 1px 3px rgba(0,0,0,0.4); display: flex; flex-direction: column; align-items: center; padding-top: 2px; font-weight: bold; font-size: 0.9em; border: 0.5px solid #666; box-sizing: border-box; pointer-events: auto; }
         .card.back { background: #0d47a1; color: transparent; border: 1px solid white; }
         .card.selected { border: 2px solid #ffeb3b; z-index: 100 !important; box-shadow: 0 0 10px gold; }
         .btn { background:#1565c0; padding: 10px; text-align: center; font-size: 0.8em; border-radius: 4px; cursor: pointer; border: none; color: white; }
@@ -44,7 +44,7 @@
     function updateWinUI() {
         const name = localStorage.getItem('solitaire_player') || 'Pelaaja';
         const wins = localStorage.getItem('solitaire_wins') || '0';
-        document.getElementById('player-name').value = name === 'Pelaaja' ? '' : name;
+        document.getElementById('player-name').value = (name === 'Pelaaja') ? '' : name;
         document.getElementById('win-display').innerText = `${name} | Voitot: ${wins}`;
     }
 
@@ -61,7 +61,6 @@
         const s = JSON.parse(history.pop());
         deck = s.deck; score = s.score; moves = s.moves;
         renderBoard();
-        const board = document.getElementById('game-board');
         s.board.forEach((colData, i) => colData.forEach(cardData => addCard(i, cardData, !cardData.back)));
         updateStats();
     }
@@ -76,6 +75,7 @@
         if(currentGame === 'spider') for(let i=0; i<54; i++) addCard(i%10, deck.pop(), i>=44);
         else for(let i=0; i<49; i++) addCard(i%7, deck.pop(), !(i%7<3 && Math.floor(i/7)<3));
         updateStats(); updateWinUI();
+        document.getElementById('deck-btn').style.visibility = 'visible';
     }
 
     function renderBoard() {
@@ -85,7 +85,7 @@
         for(let i=0; i<count; i++) {
             const col = document.createElement('div');
             col.className = 'column';
-            col.onclick = (e) => handleColClick(i, e);
+            col.onclick = (e) => handleColClick(i);
             board.appendChild(col);
         }
     }
@@ -96,65 +96,78 @@
         card.className = 'card' + (visible ? '' : ' back');
         card.dataset.value = data.v;
         if(visible) card.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[data.v]||data.v}</div><div style="font-size:0.7em">♠</div>`;
+        
+        card.onclick = (e) => {
+            e.stopPropagation();
+            handleCardInteraction(colIdx, card);
+        };
+        
         col.appendChild(card);
         fixOffsets(col);
     }
 
-    function handleColClick(colIdx, e) {
-        const col = document.getElementById('game-board').children[colIdx];
+    function handleCardInteraction(colIdx, cardElement) {
+        if (cardElement.classList.contains('back')) return;
         
-        // JOS JOTAIN ON VALITTUNA -> YRITÄ SIIRTÄÄ SINNE
-        if (selectedPino) {
-            const movingVal = parseInt(selectedPino[0].dataset.value);
-            const targetLast = col.lastElementChild;
-            if (!targetLast ? movingVal === 13 : parseInt(targetLast.dataset.value) === movingVal + 1) {
-                executeMove(sourceColIdx, colIdx, selectedPino);
+        const col = document.getElementById('game-board').children[colIdx];
+        const cards = Array.from(col.children);
+        const cardIdx = cards.indexOf(cardElement);
+        const pino = cards.slice(cardIdx);
+
+        // Spider-tarkistus: pitää olla järjestyksessä
+        if (currentGame === 'spider') {
+            for (let i = 0; i < pino.length - 1; i++) {
+                if (parseInt(pino[i].dataset.value) !== parseInt(pino[i+1].dataset.value) + 1) return;
+            }
+        }
+
+        // Yritetään automaattisiirtoa
+        const mVal = parseInt(pino[0].dataset.value);
+        const boards = document.getElementById('game-board').children;
+        
+        for (let j = 0; j < boards.length; j++) {
+            if (j === colIdx) continue;
+            const tCol = boards[j];
+            const tLast = tCol.lastElementChild;
+            if (!tLast ? mVal === 13 : parseInt(tLast.dataset.value) === mVal + 1) {
+                executeMove(colIdx, j, pino);
                 return;
             }
-            selectedPino.forEach(c => c.classList.remove('selected'));
-            selectedPino = null;
-            return;
         }
 
-        // JOS EI VALINTAA -> YRITÄ AUTOMAATTISIIRTOA TAI VALITSE ALIN PINO
-        const cards = Array.from(col.children);
-        if (cards.length === 0) return;
-
-        // Etsitään liikutettava pino (Scorpiossa kaikki näkyvä, Spiderissa sarja)
-        let pino = [];
-        for (let i = cards.length - 1; i >= 0; i--) {
-            if (cards[i].classList.contains('back')) break;
-            if (pino.length > 0 && currentGame === 'spider') {
-                if (parseInt(cards[i].dataset.value) !== parseInt(pino[0].dataset.value) + 1) break;
-            }
-            pino.unshift(cards[i]);
-            
-            // Kokeillaan heti, voiko tämän nipun siirtää automaattisesti
-            for (let j = 0; j < document.getElementById('game-board').children.length; j++) {
-                if (j === colIdx) continue;
-                const tCol = document.getElementById('game-board').children[j];
-                const tLast = tCol.lastElementChild;
-                const mVal = parseInt(pino[0].dataset.value);
-                if (!tLast ? mVal === 13 : parseInt(tLast.dataset.value) === mVal + 1) {
-                    executeMove(colIdx, j, pino);
-                    return;
-                }
-            }
-            if (currentGame !== 'scorpio' && pino.length === 1) break; 
-        }
-
-        // Jos ei automaattisiirtoa, valitaan pino manuaalisesti
+        // Jos ei automaattipaikkaa, jätetään valituksi
+        if (selectedPino) selectedPino.forEach(c => c.classList.remove('selected'));
         selectedPino = pino;
         sourceColIdx = colIdx;
         selectedPino.forEach(c => c.classList.add('selected'));
+    }
+
+    function handleColClick(colIdx) {
+        if (!selectedPino) return;
+        const col = document.getElementById('game-board').children[colIdx];
+        const movingVal = parseInt(selectedPino[0].dataset.value);
+        const targetLast = col.lastElementChild;
+
+        if (!targetLast ? movingVal === 13 : parseInt(targetLast.dataset.value) === movingVal + 1) {
+            executeMove(sourceColIdx, colIdx, selectedPino);
+        } else {
+            selectedPino.forEach(c => c.classList.remove('selected'));
+            selectedPino = null;
+        }
     }
 
     function executeMove(sIdx, tIdx, pino) {
         saveState();
         const tCol = document.getElementById('game-board').children[tIdx];
         const sCol = document.getElementById('game-board').children[sIdx];
+        
+        // Pisteytys ja siirto (ei lasketa jos kuningas jo valmiiksi tyhjässä sarakkeessa)
+        const isFreeKing = (parseInt(pino[0].dataset.value) === 13 && !tCol.lastElementChild && sCol.children[0] === pino[0]);
         pino.forEach(c => { c.classList.remove('selected'); tCol.appendChild(c); });
-        moves++; score--;
+        
+        if (!isFreeKing) { moves++; score--; }
+        
+        // Käännä kortti
         if (sCol.lastElementChild?.classList.contains('back')) {
             const c = sCol.lastElementChild; c.classList.remove('back');
             c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[c.dataset.value]||c.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
@@ -163,7 +176,7 @@
     }
 
     function fixOffsets(col) {
-        Array.from(col.children).forEach((c, i, arr) => {
+        Array.from(col.children).forEach((c, i) => {
             let off = 0;
             for(let j=0; j<i; j++) off += col.children[j].classList.contains('back') ? 6 : 14;
             c.style.top = off + 'px';
