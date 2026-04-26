@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Manual Control</title>
+    <title>Itsmyid Arena - Rules Fixed</title>
     <style>
         :root { --card-w: 36px; --card-h: 54px; --green: #1b5e20; }
         body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
@@ -127,13 +127,15 @@
             pino: pino,
             sourceCol: col,
             offsetX: e.touches[0].clientX - rect.left,
-            offsetY: e.touches[0].clientY - rect.top
+            offsetY: e.touches[0].clientY - rect.top,
+            origLeft: rect.left,
+            origTop: rect.top
         };
 
         pino.forEach((c, i) => {
             c.classList.add('dragging');
             c.style.left = rect.left + 'px';
-            c.style.top = (rect.top + (i * 20)) + 'px';
+            c.style.top = (rect.top + (i * 22)) + 'px';
             document.body.appendChild(c);
         });
 
@@ -148,16 +150,14 @@
         const y = e.touches[0].clientY - dragData.offsetY;
         dragData.pino.forEach((c, i) => {
             c.style.left = x + 'px';
-            c.style.top = (y + (i * 20)) + 'px';
+            c.style.top = (y + (i * 22)) + 'px';
         });
     }
 
     function onTouchEnd(e) {
         if (!dragData) return;
         const x = e.changedTouches[0].clientX;
-        const y = e.changedTouches[0].clientY;
         
-        // Etsi kohdesarake
         const cols = document.querySelectorAll('.column');
         let targetCol = null;
         cols.forEach(col => {
@@ -170,10 +170,19 @@
 
         if (targetCol) {
             const tLast = targetCol.lastElementChild;
-            const canDrop = !tLast ? movingVal === 13 : parseInt(tLast.dataset.value) === movingVal + 1;
+            let canDrop = false;
+
+            if (!tLast) {
+                // Sääntöjen korjaus tässä:
+                if (currentGame === 'spider') canDrop = true; // Spiderissa mikä vain
+                else if (currentGame === 'scorpio' && movingVal === 13) canDrop = true; // Scorpiossa vain K
+            } else {
+                if (parseInt(tLast.dataset.value) === movingVal + 1) canDrop = true;
+            }
             
             if (canDrop) {
                 saveState();
+                // Kuningas-sääntö: ei siirtoa jos K siirtyy sarakkeen päältä tyhjään
                 const isFreeKing = (movingVal === 13 && !tLast && dragData.sourceCol.children[0] === dragData.pino[0]);
                 dragData.pino.forEach(c => targetCol.appendChild(c));
                 if (!isFreeKing) { moves++; score--; }
@@ -181,7 +190,6 @@
             }
         }
 
-        // Palauta kortit jos siirto epäonnistui tai onnistui
         dragData.pino.forEach(c => {
             c.classList.remove('dragging');
             c.style.left = '0px';
@@ -214,7 +222,6 @@
 
     function dealMore() {
         saveState();
-        const board = document.getElementById('game-board').children;
         if(currentGame === 'spider') {
             for(let i=0; i<10; i++) if(deck.length) addCard(i, deck.pop(), true);
         } else if(deck.length) {
@@ -243,3 +250,4 @@
 </script>
 </body>
 </html>
+ 
