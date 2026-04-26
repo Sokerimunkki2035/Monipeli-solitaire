@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Rules Fixed</title>
+    <title>Itsmyid Arena - Ghost Fix</title>
     <style>
         :root { --card-w: 36px; --card-h: 54px; --green: #1b5e20; }
         body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
@@ -21,7 +21,7 @@
             user-select: none; pointer-events: auto; touch-action: none;
         }
         .card.back { background: #0d47a1; color: transparent; border: 1px solid white; }
-        .dragging { z-index: 1000 !important; opacity: 0.8; pointer-events: none; }
+        .dragging { z-index: 1000 !important; opacity: 0.9; pointer-events: none; }
         .btn { background:#1565c0; padding: 10px; text-align: center; font-size: 0.8em; border-radius: 4px; cursor: pointer; border: none; color: white; }
     </style>
 </head>
@@ -48,6 +48,7 @@
 
     function saveName() { localStorage.setItem('solitaire_player', document.getElementById('player-name').value); updateWinUI(); }
     function saveWin() { localStorage.setItem('solitaire_wins', (parseInt(localStorage.getItem('solitaire_wins')||0)+1)); updateWinUI(); }
+    
     function updateWinUI() {
         const name = localStorage.getItem('solitaire_player') || 'Pelaaja';
         document.getElementById('player-name').value = name === 'Pelaaja' ? '' : name;
@@ -72,14 +73,27 @@
     }
 
     function initGame() {
+        // TÄRKEÄ FIXI: Puhdista kaikki ennen uutta peliä
+        const board = document.getElementById('game-board');
+        board.innerHTML = '';
+        const oldCards = document.querySelectorAll('.card');
+        oldCards.forEach(c => c.remove());
+        
         currentGame = document.getElementById('game-mode').value;
         moves = 0; score = 500; deck = []; history = [];
+        dragData = null;
+
         const decks = (currentGame === 'spider') ? 8 : 4;
         for(let i=0; i<decks; i++) for(let v=1; v<=13; v++) deck.push({v});
         deck.sort(() => Math.random() - 0.5);
+
         renderBoard();
-        if(currentGame === 'spider') for(let i=0; i<54; i++) addCard(i%10, deck.pop(), i>=44);
-        else for(let i=0; i<49; i++) addCard(i%7, deck.pop(), !(i%7<3 && Math.floor(i/7)<3));
+        if(currentGame === 'spider') {
+            for(let i=0; i<54; i++) addCard(i%10, deck.pop(), i>=44);
+        } else {
+            for(let i=0; i<49; i++) addCard(i%7, deck.pop(), !(i%7<3 && Math.floor(i/7)<3));
+        }
+        
         updateStats(); updateWinUI();
         document.getElementById('deck-btn').style.visibility = 'visible';
     }
@@ -98,6 +112,7 @@
 
     function addCard(colIdx, data, visible) {
         const col = document.getElementById('game-board').children[colIdx];
+        if (!col) return;
         const card = document.createElement('div');
         card.className = 'card' + (visible ? '' : ' back');
         card.dataset.value = data.v;
@@ -110,12 +125,14 @@
     }
 
     function onTouchStart(e) {
+        if (e.touches.length > 1) return;
         const card = e.currentTarget;
         const col = card.parentElement;
         const cards = Array.from(col.children);
         const idx = cards.indexOf(card);
         const pino = cards.slice(idx);
 
+        // Sääntötarkistus siirrettävälle pinolle
         if (currentGame === 'spider') {
             for (let i = 0; i < pino.length - 1; i++) {
                 if (parseInt(pino[i].dataset.value) !== parseInt(pino[i+1].dataset.value) + 1) return;
@@ -127,9 +144,7 @@
             pino: pino,
             sourceCol: col,
             offsetX: e.touches[0].clientX - rect.left,
-            offsetY: e.touches[0].clientY - rect.top,
-            origLeft: rect.left,
-            origTop: rect.top
+            offsetY: e.touches[0].clientY - rect.top
         };
 
         pino.forEach((c, i) => {
@@ -157,6 +172,7 @@
     function onTouchEnd(e) {
         if (!dragData) return;
         const x = e.changedTouches[0].clientX;
+        const y = e.changedTouches[0].clientY;
         
         const cols = document.querySelectorAll('.column');
         let targetCol = null;
@@ -171,18 +187,18 @@
         if (targetCol) {
             const tLast = targetCol.lastElementChild;
             let canDrop = false;
-
+            
             if (!tLast) {
-                // Sääntöjen korjaus tässä:
-                if (currentGame === 'spider') canDrop = true; // Spiderissa mikä vain
-                else if (currentGame === 'scorpio' && movingVal === 13) canDrop = true; // Scorpiossa vain K
+                // SÄÄNTÖ: Spiderissa kuka vaan tyhjään, Scorpiossa vain Kuningas
+                if (currentGame === 'spider') canDrop = true;
+                else if (currentGame === 'scorpio' && movingVal === 13) canDrop = true;
             } else {
                 if (parseInt(tLast.dataset.value) === movingVal + 1) canDrop = true;
             }
             
             if (canDrop) {
                 saveState();
-                // Kuningas-sääntö: ei siirtoa jos K siirtyy sarakkeen päältä tyhjään
+                // KUNINGAS-SÄÄNTÖ [cite: 2026-02-10]
                 const isFreeKing = (movingVal === 13 && !tLast && dragData.sourceCol.children[0] === dragData.pino[0]);
                 dragData.pino.forEach(c => targetCol.appendChild(c));
                 if (!isFreeKing) { moves++; score--; }
@@ -199,7 +215,8 @@
         if (success) {
             const sCol = dragData.sourceCol;
             if (sCol.lastElementChild?.classList.contains('back')) {
-                const c = sCol.lastElementChild; c.classList.remove('back');
+                const c = sCol.lastElementChild; 
+                c.classList.remove('back');
                 c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[c.dataset.value]||c.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
                 c.addEventListener('touchstart', onTouchStart, {passive: false});
             }
@@ -215,8 +232,10 @@
     }
 
     function fixOffsets(col) {
+        if (!col) return;
         Array.from(col.children).forEach((c, i) => {
             c.style.top = (i * (c.classList.contains('back') ? 8 : 22)) + 'px';
+            c.style.left = '0px';
         });
     }
 
@@ -225,7 +244,7 @@
         if(currentGame === 'spider') {
             for(let i=0; i<10; i++) if(deck.length) addCard(i, deck.pop(), true);
         } else if(deck.length) {
-            for(let i=0; i<3; i++) addCard(i, deck.pop(), true);
+            for(let i=0; i<3; i++) if(deck.length) addCard(i, deck.pop(), true);
             document.getElementById('deck-btn').style.visibility = 'hidden';
         }
         moves++; updateStats();
@@ -236,18 +255,26 @@
         if (cards.length < 13) return;
         for (let i = 0; i <= cards.length - 13; i++) {
             let seq = true;
-            for (let j = 0; j < 12; j++) if (parseInt(cards[i+j].dataset.value) !== parseInt(cards[i+j+1].dataset.value) + 1 || cards[i+j].classList.contains('back')) seq = false;
+            for (let j = 0; j < 12; j++) {
+                if (parseInt(cards[i+j].dataset.value) !== parseInt(cards[i+j+1].dataset.value) + 1 || cards[i+j].classList.contains('back')) {
+                    seq = false; break;
+                }
+            }
             if (seq && parseInt(cards[i].dataset.value) === 13) {
-                for (let k = 0; k < 13; k++) col.removeChild(cards[i+k]);
-                score += 100; fixOffsets(col);
+                for (let k = 0; k < 13; k++) cards[i+k].remove();
+                score += 100;
+                fixOffsets(col);
                 if (document.querySelectorAll('.card').length === 0) { saveWin(); alert("VOITTO!"); }
             }
         }
     }
 
-    function updateStats() { document.getElementById('move-count').innerText = moves; document.getElementById('score').innerText = score; }
+    function updateStats() {
+        document.getElementById('move-count').innerText = moves;
+        document.getElementById('score').innerText = score;
+    }
+
     window.onload = initGame;
 </script>
 </body>
 </html>
- 
