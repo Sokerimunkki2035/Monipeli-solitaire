@@ -3,19 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Smart Stack Fix</title>
+    <title>Itsmyid Arena - Manual Control</title>
     <style>
-        :root { --card-width: 32px; --card-height: 48px; --green: #1b5e20; }
+        :root { --card-w: 36px; --card-h: 54px; --green: #1b5e20; }
         body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
         #ui-layer { background: rgba(0,0,0,0.9); padding: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; z-index: 1000; }
         .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; }
         .stat-box { background: #333; padding: 4px; border-radius: 4px; text-align: center; font-size: 0.8em; }
         .stats-summary { grid-column: span 2; text-align: center; font-size: 0.8em; color: gold; }
-        #game-board { display: flex; justify-content: center; gap: 2px; padding: 10px 2px; flex-grow: 1; }
-        .column { width: var(--card-width); height: 100%; background: rgba(255,255,255,0.05); position: relative; }
-        .card { width: var(--card-width); height: var(--card-height); background: white; border-radius: 2px; position: absolute; color: black; box-shadow: 0 1px 3px rgba(0,0,0,0.4); display: flex; flex-direction: column; align-items: center; padding-top: 2px; font-weight: bold; font-size: 0.9em; border: 0.5px solid #666; box-sizing: border-box; pointer-events: auto; }
+        #game-board { display: flex; justify-content: center; gap: 4px; padding: 15px 2px; flex-grow: 1; position: relative; }
+        .column { width: var(--card-w); height: 100%; background: rgba(255,255,255,0.05); position: relative; border-radius: 4px; }
+        .card { 
+            width: var(--card-w); height: var(--card-h); background: white; border-radius: 3px; 
+            position: absolute; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.4); 
+            display: flex; flex-direction: column; align-items: center; padding-top: 2px; 
+            font-weight: bold; font-size: 1em; border: 0.5px solid #666; box-sizing: border-box;
+            user-select: none; pointer-events: auto; touch-action: none;
+        }
         .card.back { background: #0d47a1; color: transparent; border: 1px solid white; }
-        .card.selected { border: 2px solid #ffeb3b; z-index: 100 !important; box-shadow: 0 0 10px gold; }
+        .dragging { z-index: 1000 !important; opacity: 0.8; pointer-events: none; }
         .btn { background:#1565c0; padding: 10px; text-align: center; font-size: 0.8em; border-radius: 4px; cursor: pointer; border: none; color: white; }
     </style>
 </head>
@@ -37,15 +43,15 @@
 <div id="game-board"></div>
 
 <script>
-    let moves = 0, score = 500, deck = [], currentGame = 'spider', selectedPino = null, sourceColIdx = null, history = [];
+    let moves = 0, score = 500, deck = [], currentGame = 'spider', history = [];
+    let dragData = null;
 
     function saveName() { localStorage.setItem('solitaire_player', document.getElementById('player-name').value); updateWinUI(); }
-    function saveWin() { let wins = parseInt(localStorage.getItem('solitaire_wins') || '0') + 1; localStorage.setItem('solitaire_wins', wins); updateWinUI(); }
+    function saveWin() { localStorage.setItem('solitaire_wins', (parseInt(localStorage.getItem('solitaire_wins')||0)+1)); updateWinUI(); }
     function updateWinUI() {
         const name = localStorage.getItem('solitaire_player') || 'Pelaaja';
-        const wins = localStorage.getItem('solitaire_wins') || '0';
-        document.getElementById('player-name').value = (name === 'Pelaaja') ? '' : name;
-        document.getElementById('win-display').innerText = `${name} | Voitot: ${wins}`;
+        document.getElementById('player-name').value = name === 'Pelaaja' ? '' : name;
+        document.getElementById('win-display').innerText = `${name} | Voitot: ${localStorage.getItem('solitaire_wins')||0}`;
     }
 
     function saveState() {
@@ -53,11 +59,11 @@
             board: Array.from(document.querySelectorAll('.column')).map(col => Array.from(col.children).map(c => ({ v: c.dataset.value, back: c.classList.contains('back') }))),
             deck: [...deck], score, moves
         }));
-        if (history.length > 30) history.shift();
+        if (history.length > 20) history.shift();
     }
 
     function undo() {
-        if (history.length === 0) return;
+        if (!history.length) return;
         const s = JSON.parse(history.pop());
         deck = s.deck; score = s.score; moves = s.moves;
         renderBoard();
@@ -67,7 +73,7 @@
 
     function initGame() {
         currentGame = document.getElementById('game-mode').value;
-        moves = 0; score = 500; deck = []; selectedPino = null; history = [];
+        moves = 0; score = 500; deck = []; history = [];
         const decks = (currentGame === 'spider') ? 8 : 4;
         for(let i=0; i<decks; i++) for(let v=1; v<=13; v++) deck.push({v});
         deck.sort(() => Math.random() - 0.5);
@@ -85,7 +91,7 @@
         for(let i=0; i<count; i++) {
             const col = document.createElement('div');
             col.className = 'column';
-            col.onclick = (e) => handleColClick(i);
+            col.dataset.idx = i;
             board.appendChild(col);
         }
     }
@@ -95,96 +101,120 @@
         const card = document.createElement('div');
         card.className = 'card' + (visible ? '' : ' back');
         card.dataset.value = data.v;
-        if(visible) card.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[data.v]||data.v}</div><div style="font-size:0.7em">♠</div>`;
-        
-        card.onclick = (e) => {
-            e.stopPropagation();
-            handleCardInteraction(colIdx, card);
-        };
-        
+        if(visible) {
+            card.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[data.v]||data.v}</div><div style="font-size:0.7em">♠</div>`;
+            card.addEventListener('touchstart', onTouchStart, {passive: false});
+        }
         col.appendChild(card);
         fixOffsets(col);
     }
 
-    function handleCardInteraction(colIdx, cardElement) {
-        if (cardElement.classList.contains('back')) return;
-        
-        const col = document.getElementById('game-board').children[colIdx];
+    function onTouchStart(e) {
+        const card = e.currentTarget;
+        const col = card.parentElement;
         const cards = Array.from(col.children);
-        const cardIdx = cards.indexOf(cardElement);
-        const pino = cards.slice(cardIdx);
+        const idx = cards.indexOf(card);
+        const pino = cards.slice(idx);
 
-        // Spider-tarkistus: pitää olla järjestyksessä
         if (currentGame === 'spider') {
             for (let i = 0; i < pino.length - 1; i++) {
                 if (parseInt(pino[i].dataset.value) !== parseInt(pino[i+1].dataset.value) + 1) return;
             }
         }
 
-        // Yritetään automaattisiirtoa
-        const mVal = parseInt(pino[0].dataset.value);
-        const boards = document.getElementById('game-board').children;
+        const rect = card.getBoundingClientRect();
+        dragData = {
+            pino: pino,
+            sourceCol: col,
+            offsetX: e.touches[0].clientX - rect.left,
+            offsetY: e.touches[0].clientY - rect.top
+        };
+
+        pino.forEach((c, i) => {
+            c.classList.add('dragging');
+            c.style.left = rect.left + 'px';
+            c.style.top = (rect.top + (i * 20)) + 'px';
+            document.body.appendChild(c);
+        });
+
+        document.addEventListener('touchmove', onTouchMove, {passive: false});
+        document.addEventListener('touchend', onTouchEnd);
+    }
+
+    function onTouchMove(e) {
+        if (!dragData) return;
+        e.preventDefault();
+        const x = e.touches[0].clientX - dragData.offsetX;
+        const y = e.touches[0].clientY - dragData.offsetY;
+        dragData.pino.forEach((c, i) => {
+            c.style.left = x + 'px';
+            c.style.top = (y + (i * 20)) + 'px';
+        });
+    }
+
+    function onTouchEnd(e) {
+        if (!dragData) return;
+        const x = e.changedTouches[0].clientX;
+        const y = e.changedTouches[0].clientY;
         
-        for (let j = 0; j < boards.length; j++) {
-            if (j === colIdx) continue;
-            const tCol = boards[j];
-            const tLast = tCol.lastElementChild;
-            if (!tLast ? mVal === 13 : parseInt(tLast.dataset.value) === mVal + 1) {
-                executeMove(colIdx, j, pino);
-                return;
+        // Etsi kohdesarake
+        const cols = document.querySelectorAll('.column');
+        let targetCol = null;
+        cols.forEach(col => {
+            const r = col.getBoundingClientRect();
+            if (x > r.left && x < r.right) targetCol = col;
+        });
+
+        const movingVal = parseInt(dragData.pino[0].dataset.value);
+        let success = false;
+
+        if (targetCol) {
+            const tLast = targetCol.lastElementChild;
+            const canDrop = !tLast ? movingVal === 13 : parseInt(tLast.dataset.value) === movingVal + 1;
+            
+            if (canDrop) {
+                saveState();
+                const isFreeKing = (movingVal === 13 && !tLast && dragData.sourceCol.children[0] === dragData.pino[0]);
+                dragData.pino.forEach(c => targetCol.appendChild(c));
+                if (!isFreeKing) { moves++; score--; }
+                success = true;
             }
         }
 
-        // Jos ei automaattipaikkaa, jätetään valituksi
-        if (selectedPino) selectedPino.forEach(c => c.classList.remove('selected'));
-        selectedPino = pino;
-        sourceColIdx = colIdx;
-        selectedPino.forEach(c => c.classList.add('selected'));
-    }
+        // Palauta kortit jos siirto epäonnistui tai onnistui
+        dragData.pino.forEach(c => {
+            c.classList.remove('dragging');
+            c.style.left = '0px';
+            if (!success) dragData.sourceCol.appendChild(c);
+        });
 
-    function handleColClick(colIdx) {
-        if (!selectedPino) return;
-        const col = document.getElementById('game-board').children[colIdx];
-        const movingVal = parseInt(selectedPino[0].dataset.value);
-        const targetLast = col.lastElementChild;
-
-        if (!targetLast ? movingVal === 13 : parseInt(targetLast.dataset.value) === movingVal + 1) {
-            executeMove(sourceColIdx, colIdx, selectedPino);
-        } else {
-            selectedPino.forEach(c => c.classList.remove('selected'));
-            selectedPino = null;
+        if (success) {
+            const sCol = dragData.sourceCol;
+            if (sCol.lastElementChild?.classList.contains('back')) {
+                const c = sCol.lastElementChild; c.classList.remove('back');
+                c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[c.dataset.value]||c.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
+                c.addEventListener('touchstart', onTouchStart, {passive: false});
+            }
+            fixOffsets(targetCol);
+            checkWin(targetCol);
         }
-    }
-
-    function executeMove(sIdx, tIdx, pino) {
-        saveState();
-        const tCol = document.getElementById('game-board').children[tIdx];
-        const sCol = document.getElementById('game-board').children[sIdx];
         
-        // Pisteytys ja siirto (ei lasketa jos kuningas jo valmiiksi tyhjässä sarakkeessa)
-        const isFreeKing = (parseInt(pino[0].dataset.value) === 13 && !tCol.lastElementChild && sCol.children[0] === pino[0]);
-        pino.forEach(c => { c.classList.remove('selected'); tCol.appendChild(c); });
-        
-        if (!isFreeKing) { moves++; score--; }
-        
-        // Käännä kortti
-        if (sCol.lastElementChild?.classList.contains('back')) {
-            const c = sCol.lastElementChild; c.classList.remove('back');
-            c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[c.dataset.value]||c.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
-        }
-        selectedPino = null; fixOffsets(sCol); fixOffsets(tCol); checkWin(tCol); updateStats();
+        fixOffsets(dragData.sourceCol);
+        updateStats();
+        dragData = null;
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
     }
 
     function fixOffsets(col) {
         Array.from(col.children).forEach((c, i) => {
-            let off = 0;
-            for(let j=0; j<i; j++) off += col.children[j].classList.contains('back') ? 6 : 14;
-            c.style.top = off + 'px';
+            c.style.top = (i * (c.classList.contains('back') ? 8 : 22)) + 'px';
         });
     }
 
     function dealMore() {
         saveState();
+        const board = document.getElementById('game-board').children;
         if(currentGame === 'spider') {
             for(let i=0; i<10; i++) if(deck.length) addCard(i, deck.pop(), true);
         } else if(deck.length) {
