@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Final Stable</title>
+    <title>Itsmyid Arena - Stable 2.0</title>
     <style>
         :root { --card-w: 36px; --card-h: 54px; --green: #1b5e20; }
         body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
@@ -59,7 +59,7 @@
             Array.from(col.children).map(c => ({ v: c.dataset.value, back: c.classList.contains('back') }))
         );
         history.push(JSON.stringify({ board: boardData, deck: [...deck], score, moves }));
-        if (history.length > 20) history.shift();
+        if (history.length > 25) history.shift();
     }
 
     function undo() {
@@ -74,8 +74,7 @@
     function resetBoardUI() {
         const board = document.getElementById('game-board');
         board.innerHTML = '';
-        const oldCards = document.querySelectorAll('.card');
-        oldCards.forEach(c => c.remove());
+        document.querySelectorAll('.card').forEach(c => c.remove());
         const count = (currentGame === 'spider') ? 10 : 7;
         for(let i=0; i<count; i++) {
             const col = document.createElement('div');
@@ -207,7 +206,6 @@
 
     function dealMore() {
         saveState();
-        const cols = document.getElementById('game-board').children;
         if(currentGame === 'spider') {
             for(let i=0; i<10; i++) if(deck.length) addCard(i, deck.pop(), true);
         } else if(deck.length) {
@@ -227,6 +225,15 @@
             }
             if (seq && parseInt(cards[i].dataset.value) === 13) {
                 for (let k = 0; k < 13; k++) cards[i+k].remove();
+                
+                // UUSI KORJAUS: Käännetään alta paljastuva kortti
+                const lastRemaining = col.lastElementChild;
+                if (lastRemaining && lastRemaining.classList.contains('back')) {
+                    lastRemaining.classList.remove('back');
+                    lastRemaining.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[lastRemaining.dataset.value]||lastRemaining.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
+                    lastRemaining.addEventListener('touchstart', onTouchStart, {passive: false});
+                }
+
                 score += 100; fixOffsets(col);
                 if (document.querySelectorAll('.card').length === 0) { saveWin(); alert("VOITTO!"); }
             }
