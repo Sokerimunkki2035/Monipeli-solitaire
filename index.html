@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Ghost Fix</title>
+    <title>Itsmyid Arena - Final Stable</title>
     <style>
         :root { --card-w: 36px; --card-h: 54px; --green: #1b5e20; }
         body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
-        #ui-layer { background: rgba(0,0,0,0.9); padding: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; z-index: 1000; }
+        #ui-layer { background: rgba(0,0,0,0.9); padding: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; z-index: 2000; }
         .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; }
         .stat-box { background: #333; padding: 4px; border-radius: 4px; text-align: center; font-size: 0.8em; }
-        .stats-summary { grid-column: span 2; text-align: center; font-size: 0.8em; color: gold; }
-        #game-board { display: flex; justify-content: center; gap: 4px; padding: 15px 2px; flex-grow: 1; position: relative; }
+        .stats-summary { grid-column: span 2; text-align: center; font-size: 0.8em; color: gold; min-height: 1.2em; }
+        #game-board { display: flex; justify-content: center; gap: 4px; padding: 15px 2px; flex-grow: 1; position: relative; z-index: 10; }
         .column { width: var(--card-w); height: 100%; background: rgba(255,255,255,0.05); position: relative; border-radius: 4px; }
         .card { 
             width: var(--card-w); height: var(--card-h); background: white; border-radius: 3px; 
@@ -21,7 +21,7 @@
             user-select: none; pointer-events: auto; touch-action: none;
         }
         .card.back { background: #0d47a1; color: transparent; border: 1px solid white; }
-        .dragging { z-index: 1000 !important; opacity: 0.9; pointer-events: none; }
+        .dragging { z-index: 3000 !important; opacity: 0.9; pointer-events: none; }
         .btn { background:#1565c0; padding: 10px; text-align: center; font-size: 0.8em; border-radius: 4px; cursor: pointer; border: none; color: white; }
     </style>
 </head>
@@ -35,7 +35,7 @@
     </div>
     <div class="stat-box">Pisteet: <span id="score">500</span></div>
     <div class="stat-box">Siirrot: <span id="move-count">0</span></div>
-    <div class="stats-summary" id="win-display">Ladataan...</div>
+    <div class="stats-summary" id="win-display"></div>
     <button class="btn" style="background:#555" onclick="undo()">PERUUTA</button>
     <button class="btn" id="deck-btn" onclick="dealMore()">JAA LISÄÄ</button>
 </div>
@@ -48,7 +48,6 @@
 
     function saveName() { localStorage.setItem('solitaire_player', document.getElementById('player-name').value); updateWinUI(); }
     function saveWin() { localStorage.setItem('solitaire_wins', (parseInt(localStorage.getItem('solitaire_wins')||0)+1)); updateWinUI(); }
-    
     function updateWinUI() {
         const name = localStorage.getItem('solitaire_player') || 'Pelaaja';
         document.getElementById('player-name').value = name === 'Pelaaja' ? '' : name;
@@ -56,10 +55,10 @@
     }
 
     function saveState() {
-        history.push(JSON.stringify({
-            board: Array.from(document.querySelectorAll('.column')).map(col => Array.from(col.children).map(c => ({ v: c.dataset.value, back: c.classList.contains('back') }))),
-            deck: [...deck], score, moves
-        }));
+        const boardData = Array.from(document.querySelectorAll('.column')).map(col => 
+            Array.from(col.children).map(c => ({ v: c.dataset.value, back: c.classList.contains('back') }))
+        );
+        history.push(JSON.stringify({ board: boardData, deck: [...deck], score, moves }));
         if (history.length > 20) history.shift();
     }
 
@@ -67,47 +66,38 @@
         if (!history.length) return;
         const s = JSON.parse(history.pop());
         deck = s.deck; score = s.score; moves = s.moves;
-        renderBoard();
+        resetBoardUI();
         s.board.forEach((colData, i) => colData.forEach(cardData => addCard(i, cardData, !cardData.back)));
         updateStats();
     }
 
-    function initGame() {
-        // TÄRKEÄ FIXI: Puhdista kaikki ennen uutta peliä
+    function resetBoardUI() {
         const board = document.getElementById('game-board');
         board.innerHTML = '';
         const oldCards = document.querySelectorAll('.card');
         oldCards.forEach(c => c.remove());
-        
+        const count = (currentGame === 'spider') ? 10 : 7;
+        for(let i=0; i<count; i++) {
+            const col = document.createElement('div');
+            col.className = 'column';
+            board.appendChild(col);
+        }
+    }
+
+    function initGame() {
         currentGame = document.getElementById('game-mode').value;
         moves = 0; score = 500; deck = []; history = [];
-        dragData = null;
-
+        resetBoardUI();
         const decks = (currentGame === 'spider') ? 8 : 4;
         for(let i=0; i<decks; i++) for(let v=1; v<=13; v++) deck.push({v});
         deck.sort(() => Math.random() - 0.5);
-
-        renderBoard();
         if(currentGame === 'spider') {
             for(let i=0; i<54; i++) addCard(i%10, deck.pop(), i>=44);
         } else {
             for(let i=0; i<49; i++) addCard(i%7, deck.pop(), !(i%7<3 && Math.floor(i/7)<3));
         }
-        
         updateStats(); updateWinUI();
         document.getElementById('deck-btn').style.visibility = 'visible';
-    }
-
-    function renderBoard() {
-        const board = document.getElementById('game-board');
-        board.innerHTML = '';
-        const count = (currentGame === 'spider') ? 10 : 7;
-        for(let i=0; i<count; i++) {
-            const col = document.createElement('div');
-            col.className = 'column';
-            col.dataset.idx = i;
-            board.appendChild(col);
-        }
     }
 
     function addCard(colIdx, data, visible) {
@@ -132,7 +122,6 @@
         const idx = cards.indexOf(card);
         const pino = cards.slice(idx);
 
-        // Sääntötarkistus siirrettävälle pinolle
         if (currentGame === 'spider') {
             for (let i = 0; i < pino.length - 1; i++) {
                 if (parseInt(pino[i].dataset.value) !== parseInt(pino[i+1].dataset.value) + 1) return;
@@ -140,12 +129,7 @@
         }
 
         const rect = card.getBoundingClientRect();
-        dragData = {
-            pino: pino,
-            sourceCol: col,
-            offsetX: e.touches[0].clientX - rect.left,
-            offsetY: e.touches[0].clientY - rect.top
-        };
+        dragData = { pino, sourceCol: col, offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top };
 
         pino.forEach((c, i) => {
             c.classList.add('dragging');
@@ -153,7 +137,6 @@
             c.style.top = (rect.top + (i * 22)) + 'px';
             document.body.appendChild(c);
         });
-
         document.addEventListener('touchmove', onTouchMove, {passive: false});
         document.addEventListener('touchend', onTouchEnd);
     }
@@ -172,8 +155,6 @@
     function onTouchEnd(e) {
         if (!dragData) return;
         const x = e.changedTouches[0].clientX;
-        const y = e.changedTouches[0].clientY;
-        
         const cols = document.querySelectorAll('.column');
         let targetCol = null;
         cols.forEach(col => {
@@ -183,23 +164,12 @@
 
         const movingVal = parseInt(dragData.pino[0].dataset.value);
         let success = false;
-
         if (targetCol) {
             const tLast = targetCol.lastElementChild;
-            let canDrop = false;
-            
-            if (!tLast) {
-                // SÄÄNTÖ: Spiderissa kuka vaan tyhjään, Scorpiossa vain Kuningas
-                if (currentGame === 'spider') canDrop = true;
-                else if (currentGame === 'scorpio' && movingVal === 13) canDrop = true;
-            } else {
-                if (parseInt(tLast.dataset.value) === movingVal + 1) canDrop = true;
-            }
-            
+            let canDrop = (!tLast) ? (currentGame === 'spider' || movingVal === 13) : (parseInt(tLast.dataset.value) === movingVal + 1);
             if (canDrop) {
                 saveState();
-                // KUNINGAS-SÄÄNTÖ [cite: 2026-02-10]
-                const isFreeKing = (movingVal === 13 && !tLast && dragData.sourceCol.children[0] === dragData.pino[0]);
+                const isFreeKing = (movingVal === 13 && !tLast && dragData.sourceCol.children.length === dragData.pino.length);
                 dragData.pino.forEach(c => targetCol.appendChild(c));
                 if (!isFreeKing) { moves++; score--; }
                 success = true;
@@ -208,24 +178,19 @@
 
         dragData.pino.forEach(c => {
             c.classList.remove('dragging');
-            c.style.left = '0px';
             if (!success) dragData.sourceCol.appendChild(c);
         });
 
         if (success) {
-            const sCol = dragData.sourceCol;
-            if (sCol.lastElementChild?.classList.contains('back')) {
-                const c = sCol.lastElementChild; 
-                c.classList.remove('back');
-                c.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[c.dataset.value]||c.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
-                c.addEventListener('touchstart', onTouchStart, {passive: false});
+            const last = dragData.sourceCol.lastElementChild;
+            if (last?.classList.contains('back')) {
+                last.classList.remove('back');
+                last.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[last.dataset.value]||last.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
+                last.addEventListener('touchstart', onTouchStart, {passive: false});
             }
-            fixOffsets(targetCol);
-            checkWin(targetCol);
+            fixOffsets(targetCol); checkWin(targetCol);
         }
-        
-        fixOffsets(dragData.sourceCol);
-        updateStats();
+        fixOffsets(dragData.sourceCol); updateStats();
         dragData = null;
         document.removeEventListener('touchmove', onTouchMove);
         document.removeEventListener('touchend', onTouchEnd);
@@ -236,11 +201,13 @@
         Array.from(col.children).forEach((c, i) => {
             c.style.top = (i * (c.classList.contains('back') ? 8 : 22)) + 'px';
             c.style.left = '0px';
+            c.style.zIndex = i;
         });
     }
 
     function dealMore() {
         saveState();
+        const cols = document.getElementById('game-board').children;
         if(currentGame === 'spider') {
             for(let i=0; i<10; i++) if(deck.length) addCard(i, deck.pop(), true);
         } else if(deck.length) {
@@ -256,14 +223,11 @@
         for (let i = 0; i <= cards.length - 13; i++) {
             let seq = true;
             for (let j = 0; j < 12; j++) {
-                if (parseInt(cards[i+j].dataset.value) !== parseInt(cards[i+j+1].dataset.value) + 1 || cards[i+j].classList.contains('back')) {
-                    seq = false; break;
-                }
+                if (parseInt(cards[i+j].dataset.value) !== parseInt(cards[i+j+1].dataset.value) + 1 || cards[i+j].classList.contains('back')) { seq = false; break; }
             }
             if (seq && parseInt(cards[i].dataset.value) === 13) {
                 for (let k = 0; k < 13; k++) cards[i+k].remove();
-                score += 100;
-                fixOffsets(col);
+                score += 100; fixOffsets(col);
                 if (document.querySelectorAll('.card').length === 0) { saveWin(); alert("VOITTO!"); }
             }
         }
@@ -273,7 +237,6 @@
         document.getElementById('move-count').innerText = moves;
         document.getElementById('score').innerText = score;
     }
-
     window.onload = initGame;
 </script>
 </body>
