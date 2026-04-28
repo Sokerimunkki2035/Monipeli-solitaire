@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Stable 2.0</title>
+    <title>Itsmyid Arena - Undo Fix</title>
     <style>
         :root { --card-w: 36px; --card-h: 54px; --green: #1b5e20; }
         body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
@@ -59,7 +59,7 @@
             Array.from(col.children).map(c => ({ v: c.dataset.value, back: c.classList.contains('back') }))
         );
         history.push(JSON.stringify({ board: boardData, deck: [...deck], score, moves }));
-        if (history.length > 25) history.shift();
+        if (history.length > 30) history.shift();
     }
 
     function undo() {
@@ -67,7 +67,11 @@
         const s = JSON.parse(history.pop());
         deck = s.deck; score = s.score; moves = s.moves;
         resetBoardUI();
-        s.board.forEach((colData, i) => colData.forEach(cardData => addCard(i, cardData, !cardData.back)));
+        s.board.forEach((colData, i) => {
+            colData.forEach(cardData => {
+                addCard(i, { v: cardData.v }, !cardData.back);
+            });
+        });
         updateStats();
     }
 
@@ -226,7 +230,6 @@
             if (seq && parseInt(cards[i].dataset.value) === 13) {
                 for (let k = 0; k < 13; k++) cards[i+k].remove();
                 
-                // UUSI KORJAUS: Käännetään alta paljastuva kortti
                 const lastRemaining = col.lastElementChild;
                 if (lastRemaining && lastRemaining.classList.contains('back')) {
                     lastRemaining.classList.remove('back');
