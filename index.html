@@ -1,1 +1,266 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Itsmyid Arena - Rock Solid</title>
+    <style>
+        :root { --card-w: 36px; --card-h: 54px; --green: #1b5e20; }
+        body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
+        #ui-layer { background: rgba(0,0,0,0.9); padding: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; z-index: 2000; }
+        .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; }
+        .stat-box { background: #333; padding: 4px; border-radius: 4px; text-align: center; font-size: 0.8em; }
+        .stats-summary { grid-column: span 2; text-align: center; font-size: 0.8em; color: gold; min-height: 1.2em; }
+        #game-board { display: flex; justify-content: center; gap: 4px; padding: 15px 2px; flex-grow: 1; position: relative; z-index: 10; }
+        .column { width: var(--card-w); height: 100%; background: rgba(255,255,255,0.05); position: relative; border-radius: 4px; }
+        .card { 
+            width: var(--card-w); height: var(--card-h); background: white; border-radius: 3px; 
+            position: absolute; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.4); 
+            display: flex; flex-direction: column; align-items: center; padding-top: 2px; 
+            font-weight: bold; font-size: 1em; border: 0.5px solid #666; box-sizing: border-box;
+            user-select: none; pointer-events: auto; touch-action: none;
+        }
+        .card.back { background: #0d47a1; color: transparent; border: 1px solid white; }
+        .dragging { z-index: 3000 !important; opacity: 0.9; pointer-events: none; }
+        .btn { background:#1565c0; padding: 10px; text-align: center; font-size: 0.8em; border-radius: 4px; cursor: pointer; border: none; color: white; }
+    </style>
+</head>
+<body>
+
+<div id="ui-layer">
+    <div class="control-row">
+        <input type="text" id="player-name" placeholder="Nimi" onchange="saveName()" style="width: 80px;">
+        <select id="game-mode" onchange="initGame()"><option value="spider">Spider</option><option value="scorpio">Scorpio</option></select>
+        <button onclick="initGame()" class="btn" style="background:#4caf50">JAO</button>
+    </div>
+    <div class="stat-box">Pisteet: <span id="score">500</span></div>
+    <div class="stat-box">Siirrot: <span id="move-count">0</span></div>
+    <div class="stats-summary" id="win-display"></div>
+    <button class="btn" style="background:#555" onclick="undo()">PERUUTA</button>
+    <button class="btn" id="deck-btn" onclick="dealMore()">JAA LISÄÄ</button>
+</div>
+
+<div id="game-board"></div>
+
+<script>
+    let moves = 0, score = 500, deck = [], currentGame = 'spider', history = [];
+    let dragData = null;
+
+    function saveName() { localStorage.setItem('solitaire_player', document.getElementById('player-name').value); updateWinUI(); }
+    function saveWin() { localStorage.setItem('solitaire_wins', (parseInt(localStorage.getItem('solitaire_wins')||0)+1)); updateWinUI(); }
+    function updateWinUI() {
+        const name = localStorage.getItem('solitaire_player') || 'Pelaaja';
+        document.getElementById('player-name').value = name === 'Pelaaja' ? '' : name;
+        document.getElementById('win-display').innerText = `${name} | Voitot: ${localStorage.getItem('solitaire_wins')||0}`;
+    }
+
+    function saveState() {
+        const boardData = Array.from(document.querySelectorAll('.column')).map(col => 
+            Array.from(col.children).map(c => ({ v: parseInt(c.dataset.value), back: c.classList.contains('back') }))
+        );
+        history.push(JSON.stringify({ board: boardData, deck: JSON.parse(JSON.stringify(deck)), score, moves }));
+        if (history.length > 40) history.shift();
+    }
+
+    function undo() {
+        if (!history.length) return;
+        const s = JSON.parse(history.pop());
+        deck = s.deck; score = s.score; moves = s.moves;
+        
+        const board = document.getElementById('game-board');
+        board.innerHTML = '';
+        const count = (currentGame === 'spider') ? 10 : 7;
+        for(let i=0; i<count; i++) {
+            const col = document.createElement('div');
+            col.className = 'column';
+            board.appendChild(col);
+        }
+
+        s.board.forEach((colData, i) => {
+            colData.forEach(cardData => {
+                addCard(i, { v: cardData.v }, !cardData.back);
+            });
+        });
+        updateStats();
+    }
+
+    function initGame() {
+        currentGame = document.getElementById('game-mode').value;
+        moves = 0; score = 500; deck = []; history = [];
+        const board = document.getElementById('game-board');
+        board.innerHTML = '';
+        const count = (currentGame === 'spider') ? 10 : 7;
+        for(let i=0; i<count; i++) {
+            const col = document.createElement('div');
+            col.className = 'column';
+            board.appendChild(col);
+        }
+
+        const decks = (currentGame === 'spider') ? 8 : 4;
+        for(let i=0; i<decks; i++) for(let v=1; v<=13; v++) deck.push({v});
+        deck.sort(() => Math.random() - 0.5);
+
+        if(currentGame === 'spider') {
+            for(let i=0; i<54; i++) addCard(i%10, deck.pop(), i>=44);
+        } else {
+            for(let i=0; i<49; i++) addCard(i%7, deck.pop(), !(i%7<3 && Math.floor(i/7)<3));
+        }
+        updateStats(); updateWinUI();
+        document.getElementById('deck-btn').style.visibility = 'visible';
+    }
+
+    function addCard(colIdx, data, visible) {
+        const col = document.getElementById('game-board').children[colIdx];
+        if (!col) return;
+        const card = document.createElement('div');
+        card.className = 'card' + (visible ? '' : ' back');
+        card.dataset.value = data.v;
+        if(visible) {
+            card.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[data.v]||data.v}</div><div style="font-size:0.7em">♠</div>`;
+            card.addEventListener('touchstart', onTouchStart, {passive: false});
+        }
+        col.appendChild(card);
+        fixOffsets(col);
+    }
+
+    function onTouchStart(e) {
+        if (e.touches.length > 1) return;
+        const card = e.currentTarget;
+        const col = card.parentElement;
+        const cards = Array.from(col.children);
+        const idx = cards.indexOf(card);
+        const pino = cards.slice(idx);
+
+        if (currentGame === 'spider') {
+            for (let i = 0; i < pino.length - 1; i++) {
+                if (parseInt(pino[i].dataset.value) !== parseInt(pino[i+1].dataset.value) + 1) return;
+            }
+        }
+
+        const rect = card.getBoundingClientRect();
+        dragData = { pino, sourceCol: col, offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top };
+
+        pino.forEach((c, i) => {
+            c.classList.add('dragging');
+            c.style.left = rect.left + 'px';
+            c.style.top = (rect.top + (i * 22)) + 'px';
+            document.body.appendChild(c);
+        });
+        document.addEventListener('touchmove', onTouchMove, {passive: false});
+        document.addEventListener('touchend', onTouchEnd);
+    }
+
+    function onTouchMove(e) {
+        if (!dragData) return;
+        e.preventDefault();
+        const x = e.touches[0].clientX - dragData.offsetX;
+        const y = e.touches[0].clientY - dragData.offsetY;
+        dragData.pino.forEach((c, i) => {
+            c.style.left = x + 'px';
+            c.style.top = (y + (i * 22)) + 'px';
+        });
+    }
+
+    function onTouchEnd(e) {
+        if (!dragData) return;
+        const x = e.changedTouches[0].clientX;
+        const cols = document.querySelectorAll('.column');
+        let targetCol = null;
+        cols.forEach(col => {
+            const r = col.getBoundingClientRect();
+            if (x > r.left && x < r.right) targetCol = col;
+        });
+
+        const movingVal = parseInt(dragData.pino[0].dataset.value);
+        let success = false;
+
+        if (targetCol) {
+            const tLast = targetCol.lastElementChild;
+            let canDrop = (!tLast) ? (currentGame === 'spider' || movingVal === 13) : (parseInt(tLast.dataset.value) === movingVal + 1);
+            if (canDrop) {
+                saveState();
+                const isFreeKing = (movingVal === 13 && !tLast && dragData.sourceCol.children.length === 0);
+                dragData.pino.forEach(c => {
+                    c.classList.remove('dragging');
+                    targetCol.appendChild(c);
+                });
+                if (!isFreeKing) { moves++; score--; }
+                success = true;
+            }
+        }
+
+        if (!success) {
+            dragData.pino.forEach(c => {
+                c.classList.remove('dragging');
+                dragData.sourceCol.appendChild(c);
+            });
+        } else {
+            const last = dragData.sourceCol.lastElementChild;
+            if (last && last.classList.contains('back')) {
+                last.classList.remove('back');
+                last.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[last.dataset.value]||last.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
+                last.addEventListener('touchstart', onTouchStart, {passive: false});
+            }
+            fixOffsets(targetCol);
+            checkWin(targetCol);
+        }
+        
+        fixOffsets(dragData.sourceCol);
+        updateStats();
+        dragData = null;
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+    }
+
+    function fixOffsets(col) {
+        if (!col) return;
+        Array.from(col.children).forEach((c, i) => {
+            c.style.top = (i * (c.classList.contains('back') ? 8 : 22)) + 'px';
+            c.style.left = '0px';
+            c.style.zIndex = i;
+        });
+    }
+
+    function dealMore() {
+        saveState();
+        const cols = document.getElementById('game-board').children;
+        if(currentGame === 'spider') {
+            for(let i=0; i<10; i++) if(deck.length) addCard(i, deck.pop(), true);
+        } else if(deck.length) {
+            for(let i=0; i<3; i++) if(deck.length) addCard(i, deck.pop(), true);
+            document.getElementById('deck-btn').style.visibility = 'hidden';
+        }
+        moves++; updateStats();
+    }
+
+    function checkWin(col) {
+        const cards = Array.from(col.children);
+        if (cards.length < 13) return;
+        for (let i = 0; i <= cards.length - 13; i++) {
+            let seq = true;
+            for (let j = 0; j < 12; j++) {
+                if (parseInt(cards[i+j].dataset.value) !== parseInt(cards[i+j+1].dataset.value) + 1 || cards[i+j].classList.contains('back')) { seq = false; break; }
+            }
+            if (seq && parseInt(cards[i].dataset.value) === 13) {
+                for (let k = 0; k < 13; k++) cards[i+k].remove();
+                const last = col.lastElementChild;
+                if (last && last.classList.contains('back')) {
+                    last.classList.remove('back');
+                    last.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[last.dataset.value]||last.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
+                    last.addEventListener('touchstart', onTouchStart, {passive: false});
+                }
+                score += 100; fixOffsets(col);
+                if (document.querySelectorAll('.card').length === 0) { saveWin(); alert("VOITTO!"); }
+            }
+        }
+    }
+
+    function updateStats() {
+        document.getElementById('move-count').innerText = moves;
+        document.getElementById('score').innerText = score;
+    }
+    window.onload = initGame;
+</script>
+</body>
+</html>
 
