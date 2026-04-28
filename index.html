@@ -1,266 +1,325 @@
 <!DOCTYPE html>
 <html lang="fi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Itsmyid Arena - Rock Solid</title>
-    <style>
-        :root { --card-w: 36px; --card-h: 54px; --green: #1b5e20; }
-        body { font-family: sans-serif; background: var(--green); color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; display: flex; flex-direction: column; }
-        #ui-layer { background: rgba(0,0,0,0.9); padding: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; z-index: 2000; }
-        .control-row { grid-column: span 2; display: flex; gap: 5px; justify-content: center; }
-        .stat-box { background: #333; padding: 4px; border-radius: 4px; text-align: center; font-size: 0.8em; }
-        .stats-summary { grid-column: span 2; text-align: center; font-size: 0.8em; color: gold; min-height: 1.2em; }
-        #game-board { display: flex; justify-content: center; gap: 4px; padding: 15px 2px; flex-grow: 1; position: relative; z-index: 10; }
-        .column { width: var(--card-w); height: 100%; background: rgba(255,255,255,0.05); position: relative; border-radius: 4px; }
-        .card { 
-            width: var(--card-w); height: var(--card-h); background: white; border-radius: 3px; 
-            position: absolute; color: black; box-shadow: 0 2px 4px rgba(0,0,0,0.4); 
-            display: flex; flex-direction: column; align-items: center; padding-top: 2px; 
-            font-weight: bold; font-size: 1em; border: 0.5px solid #666; box-sizing: border-box;
-            user-select: none; pointer-events: auto; touch-action: none;
-        }
-        .card.back { background: #0d47a1; color: transparent; border: 1px solid white; }
-        .dragging { z-index: 3000 !important; opacity: 0.9; pointer-events: none; }
-        .btn { background:#1565c0; padding: 10px; text-align: center; font-size: 0.8em; border-radius: 4px; cursor: pointer; border: none; color: white; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spider Race 2P</title>
+
+<style>
+body {
+    margin:0;
+    font-family:sans-serif;
+    background:#1b5e20;
+    color:white;
+}
+
+#top {
+    background:#111;
+    padding:8px;
+    display:flex;
+    gap:8px;
+    align-items:center;
+}
+
+input { width:90px; }
+
+.board {
+    display:flex;
+    justify-content:center;
+    gap:4px;
+    padding:10px;
+}
+
+.column {
+    width:40px;
+    height:70vh;
+    background:rgba(255,255,255,0.1);
+    position:relative;
+}
+
+.card {
+    width:40px;
+    height:60px;
+    background:white;
+    color:black;
+    position:absolute;
+    border-radius:4px;
+    text-align:center;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.back {
+    background:#0d47a1;
+}
+
+.dragging {
+    opacity:0.8;
+    pointer-events:none;
+    z-index:9999;
+}
+</style>
 </head>
+
 <body>
 
-<div id="ui-layer">
-    <div class="control-row">
-        <input type="text" id="player-name" placeholder="Nimi" onchange="saveName()" style="width: 80px;">
-        <select id="game-mode" onchange="initGame()"><option value="spider">Spider</option><option value="scorpio">Scorpio</option></select>
-        <button onclick="initGame()" class="btn" style="background:#4caf50">JAO</button>
-    </div>
-    <div class="stat-box">Pisteet: <span id="score">500</span></div>
-    <div class="stat-box">Siirrot: <span id="move-count">0</span></div>
-    <div class="stats-summary" id="win-display"></div>
-    <button class="btn" style="background:#555" onclick="undo()">PERUUTA</button>
-    <button class="btn" id="deck-btn" onclick="dealMore()">JAA LISÄÄ</button>
+<div id="top">
+<input id="p1" placeholder="P1">
+<input id="p2" placeholder="P2">
+<button onclick="startGame()">JAO</button>
+<button onclick="undo()">PERUUTA</button>
+<div id="stats"></div>
 </div>
 
-<div id="game-board"></div>
+<div class="board" id="board0"></div>
+<div class="board" id="board1"></div>
 
 <script>
-    let moves = 0, score = 500, deck = [], currentGame = 'spider', history = [];
-    let dragData = null;
 
-    function saveName() { localStorage.setItem('solitaire_player', document.getElementById('player-name').value); updateWinUI(); }
-    function saveWin() { localStorage.setItem('solitaire_wins', (parseInt(localStorage.getItem('solitaire_wins')||0)+1)); updateWinUI(); }
-    function updateWinUI() {
-        const name = localStorage.getItem('solitaire_player') || 'Pelaaja';
-        document.getElementById('player-name').value = name === 'Pelaaja' ? '' : name;
-        document.getElementById('win-display').innerText = `${name} | Voitot: ${localStorage.getItem('solitaire_wins')||0}`;
+let state = {
+    players: [
+        {name:"", wins:0, games:0},
+        {name:"", wins:0, games:0}
+    ],
+    boards: [[],[]],
+    history: [[],[]],
+    startTime:0,
+    times:[null,null],
+    finished:[false,false],
+    seed:0
+};
+
+let drag = null;
+
+// ---------- STORAGE ----------
+function save() {
+    localStorage.setItem("spider_race", JSON.stringify(state));
+}
+
+function load() {
+    const s = localStorage.getItem("spider_race");
+    if (s) state = JSON.parse(s);
+}
+
+// ---------- RANDOM (SEED) ----------
+function seededRandom(seed) {
+    return function() {
+        seed = (seed * 16807) % 2147483647;
+        return (seed - 1) / 2147483646;
+    }
+}
+
+function createDeck(seed) {
+    let rand = seededRandom(seed);
+    let d = [];
+
+    for (let i=0;i<8;i++) {
+        for (let v=1;v<=13;v++) d.push(v);
     }
 
-    function saveState() {
-        const boardData = Array.from(document.querySelectorAll('.column')).map(col => 
-            Array.from(col.children).map(c => ({ v: parseInt(c.dataset.value), back: c.classList.contains('back') }))
-        );
-        history.push(JSON.stringify({ board: boardData, deck: JSON.parse(JSON.stringify(deck)), score, moves }));
-        if (history.length > 40) history.shift();
+    for (let i=d.length-1;i>0;i--) {
+        let j = Math.floor(rand()* (i+1));
+        [d[i], d[j]] = [d[j], d[i]];
     }
 
-    function undo() {
-        if (!history.length) return;
-        const s = JSON.parse(history.pop());
-        deck = s.deck; score = s.score; moves = s.moves;
-        
-        const board = document.getElementById('game-board');
-        board.innerHTML = '';
-        const count = (currentGame === 'spider') ? 10 : 7;
-        for(let i=0; i<count; i++) {
-            const col = document.createElement('div');
-            col.className = 'column';
-            board.appendChild(col);
-        }
+    return d;
+}
 
-        s.board.forEach((colData, i) => {
-            colData.forEach(cardData => {
-                addCard(i, { v: cardData.v }, !cardData.back);
+// ---------- GAME ----------
+function startGame() {
+    state.players[0].name = document.getElementById("p1").value || "P1";
+    state.players[1].name = document.getElementById("p2").value || "P2";
+
+    state.seed = Date.now();
+    let deck = createDeck(state.seed);
+
+    state.startTime = Date.now();
+    state.times = [null,null];
+    state.finished = [false,false];
+    state.history = [[],[]];
+
+    for (let p=0;p<2;p++) {
+        state.boards[p] = [];
+        for (let i=0;i<10;i++) state.boards[p].push([]);
+
+        let d = [...deck];
+
+        for (let i=0;i<54;i++) {
+            let col = i%10;
+            state.boards[p][col].push({
+                v:d.pop(),
+                up:i>=44
             });
-        });
-        updateStats();
-    }
-
-    function initGame() {
-        currentGame = document.getElementById('game-mode').value;
-        moves = 0; score = 500; deck = []; history = [];
-        const board = document.getElementById('game-board');
-        board.innerHTML = '';
-        const count = (currentGame === 'spider') ? 10 : 7;
-        for(let i=0; i<count; i++) {
-            const col = document.createElement('div');
-            col.className = 'column';
-            board.appendChild(col);
         }
-
-        const decks = (currentGame === 'spider') ? 8 : 4;
-        for(let i=0; i<decks; i++) for(let v=1; v<=13; v++) deck.push({v});
-        deck.sort(() => Math.random() - 0.5);
-
-        if(currentGame === 'spider') {
-            for(let i=0; i<54; i++) addCard(i%10, deck.pop(), i>=44);
-        } else {
-            for(let i=0; i<49; i++) addCard(i%7, deck.pop(), !(i%7<3 && Math.floor(i/7)<3));
-        }
-        updateStats(); updateWinUI();
-        document.getElementById('deck-btn').style.visibility = 'visible';
     }
 
-    function addCard(colIdx, data, visible) {
-        const col = document.getElementById('game-board').children[colIdx];
-        if (!col) return;
-        const card = document.createElement('div');
-        card.className = 'card' + (visible ? '' : ' back');
-        card.dataset.value = data.v;
-        if(visible) {
-            card.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[data.v]||data.v}</div><div style="font-size:0.7em">♠</div>`;
-            card.addEventListener('touchstart', onTouchStart, {passive: false});
-        }
-        col.appendChild(card);
-        fixOffsets(col);
-    }
+    renderAll();
+    save();
+}
 
-    function onTouchStart(e) {
-        if (e.touches.length > 1) return;
-        const card = e.currentTarget;
-        const col = card.parentElement;
-        const cards = Array.from(col.children);
-        const idx = cards.indexOf(card);
-        const pino = cards.slice(idx);
+// ---------- RENDER ----------
+function renderAll() {
+    renderBoard(0);
+    renderBoard(1);
+    updateStats();
+}
 
-        if (currentGame === 'spider') {
-            for (let i = 0; i < pino.length - 1; i++) {
-                if (parseInt(pino[i].dataset.value) !== parseInt(pino[i+1].dataset.value) + 1) return;
-            }
-        }
+function renderBoard(p) {
+    const board = document.getElementById("board"+p);
+    board.innerHTML="";
 
-        const rect = card.getBoundingClientRect();
-        dragData = { pino, sourceCol: col, offsetX: e.touches[0].clientX - rect.left, offsetY: e.touches[0].clientY - rect.top };
+    state.boards[p].forEach((col,ci)=>{
+        const colEl = document.createElement("div");
+        colEl.className="column";
 
-        pino.forEach((c, i) => {
-            c.classList.add('dragging');
-            c.style.left = rect.left + 'px';
-            c.style.top = (rect.top + (i * 22)) + 'px';
-            document.body.appendChild(c);
-        });
-        document.addEventListener('touchmove', onTouchMove, {passive: false});
-        document.addEventListener('touchend', onTouchEnd);
-    }
+        col.forEach((card,i)=>{
+            const el = document.createElement("div");
+            el.className="card"+(card.up?"":" back");
+            el.style.top=(i*(card.up?22:8))+"px";
 
-    function onTouchMove(e) {
-        if (!dragData) return;
-        e.preventDefault();
-        const x = e.touches[0].clientX - dragData.offsetX;
-        const y = e.touches[0].clientY - dragData.offsetY;
-        dragData.pino.forEach((c, i) => {
-            c.style.left = x + 'px';
-            c.style.top = (y + (i * 22)) + 'px';
-        });
-    }
+            if (card.up) el.innerText = card.v;
 
-    function onTouchEnd(e) {
-        if (!dragData) return;
-        const x = e.changedTouches[0].clientX;
-        const cols = document.querySelectorAll('.column');
-        let targetCol = null;
-        cols.forEach(col => {
-            const r = col.getBoundingClientRect();
-            if (x > r.left && x < r.right) targetCol = col;
+            el.onpointerdown = e => startDrag(e,p,ci,i);
+
+            colEl.appendChild(el);
         });
 
-        const movingVal = parseInt(dragData.pino[0].dataset.value);
-        let success = false;
+        board.appendChild(colEl);
+    });
+}
 
-        if (targetCol) {
-            const tLast = targetCol.lastElementChild;
-            let canDrop = (!tLast) ? (currentGame === 'spider' || movingVal === 13) : (parseInt(tLast.dataset.value) === movingVal + 1);
-            if (canDrop) {
-                saveState();
-                const isFreeKing = (movingVal === 13 && !tLast && dragData.sourceCol.children.length === 0);
-                dragData.pino.forEach(c => {
-                    c.classList.remove('dragging');
-                    targetCol.appendChild(c);
-                });
-                if (!isFreeKing) { moves++; score--; }
-                success = true;
-            }
-        }
+// ---------- DRAG ----------
+function startDrag(e,p,ci,i) {
+    const col = state.boards[p][ci];
+    if (!col[i].up) return;
 
-        if (!success) {
-            dragData.pino.forEach(c => {
-                c.classList.remove('dragging');
-                dragData.sourceCol.appendChild(c);
-            });
-        } else {
-            const last = dragData.sourceCol.lastElementChild;
-            if (last && last.classList.contains('back')) {
-                last.classList.remove('back');
-                last.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[last.dataset.value]||last.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
-                last.addEventListener('touchstart', onTouchStart, {passive: false});
-            }
-            fixOffsets(targetCol);
-            checkWin(targetCol);
-        }
-        
-        fixOffsets(dragData.sourceCol);
-        updateStats();
-        dragData = null;
-        document.removeEventListener('touchmove', onTouchMove);
-        document.removeEventListener('touchend', onTouchEnd);
-    }
+    saveHistory(p);
 
-    function fixOffsets(col) {
-        if (!col) return;
-        Array.from(col.children).forEach((c, i) => {
-            c.style.top = (i * (c.classList.contains('back') ? 8 : 22)) + 'px';
-            c.style.left = '0px';
-            c.style.zIndex = i;
-        });
-    }
+    drag = {
+        p, ci, i,
+        cards: col.slice(i)
+    };
 
-    function dealMore() {
-        saveState();
-        const cols = document.getElementById('game-board').children;
-        if(currentGame === 'spider') {
-            for(let i=0; i<10; i++) if(deck.length) addCard(i, deck.pop(), true);
-        } else if(deck.length) {
-            for(let i=0; i<3; i++) if(deck.length) addCard(i, deck.pop(), true);
-            document.getElementById('deck-btn').style.visibility = 'hidden';
-        }
-        moves++; updateStats();
-    }
+    col.splice(i);
 
-    function checkWin(col) {
-        const cards = Array.from(col.children);
-        if (cards.length < 13) return;
-        for (let i = 0; i <= cards.length - 13; i++) {
-            let seq = true;
-            for (let j = 0; j < 12; j++) {
-                if (parseInt(cards[i+j].dataset.value) !== parseInt(cards[i+j+1].dataset.value) + 1 || cards[i+j].classList.contains('back')) { seq = false; break; }
-            }
-            if (seq && parseInt(cards[i].dataset.value) === 13) {
-                for (let k = 0; k < 13; k++) cards[i+k].remove();
-                const last = col.lastElementChild;
-                if (last && last.classList.contains('back')) {
-                    last.classList.remove('back');
-                    last.innerHTML = `<div>${{1:'A',11:'J',12:'Q',13:'K'}[last.dataset.value]||last.dataset.value}</div><div style="font-size:0.7em">♠</div>`;
-                    last.addEventListener('touchstart', onTouchStart, {passive: false});
-                }
-                score += 100; fixOffsets(col);
-                if (document.querySelectorAll('.card').length === 0) { saveWin(); alert("VOITTO!"); }
-            }
+    document.onpointermove = moveDrag;
+    document.onpointerup = endDrag;
+}
+
+function moveDrag(e) {}
+
+function endDrag(e) {
+    const board = document.getElementById("board"+drag.p);
+    const cols = board.children;
+
+    let target = null;
+
+    for (let i=0;i<cols.length;i++) {
+        let r = cols[i].getBoundingClientRect();
+        if (e.clientX > r.left && e.clientX < r.right) {
+            target = i;
         }
     }
 
-    function updateStats() {
-        document.getElementById('move-count').innerText = moves;
-        document.getElementById('score').innerText = score;
+    let success = false;
+
+    if (target !== null) {
+        let to = state.boards[drag.p][target];
+        let first = drag.cards[0].v;
+
+        if (!to.length || to[to.length-1].v === first+1) {
+            drag.cards.forEach(c=>to.push(c));
+            success = true;
+        }
     }
-    window.onload = initGame;
+
+    if (!success) {
+        drag.cards.forEach(c=>state.boards[drag.p][drag.ci].push(c));
+    } else {
+        let src = state.boards[drag.p][drag.ci];
+        let last = src[src.length-1];
+        if (last && !last.up) last.up = true;
+    }
+
+    drag = null;
+
+    renderBoard(0);
+    renderBoard(1);
+    checkWin();
+    save();
+
+    document.onpointermove = null;
+    document.onpointerup = null;
+}
+
+// ---------- UNDO ----------
+function saveHistory(p) {
+    state.history[p].push(JSON.stringify(state.boards[p]));
+    if (state.history[p].length > 50) state.history[p].shift();
+}
+
+function undo() {
+    for (let p=0;p<2;p++) {
+        if (state.history[p].length) {
+            state.boards[p] = JSON.parse(state.history[p].pop());
+        }
+    }
+    renderAll();
+}
+
+// ---------- WIN ----------
+function checkWin() {
+    state.boards.forEach((b,p)=>{
+        let total=0;
+        b.forEach(c=>total+=c.length);
+
+        if (total===0 && !state.finished[p]) {
+            state.finished[p]=true;
+            state.times[p]=Date.now()-state.startTime;
+
+            if (state.finished[0] && state.finished[1]) {
+                let winner = state.times[0] < state.times[1] ? 0 : 1;
+
+                state.players[winner].wins++;
+                state.players[0].games++;
+                state.players[1].games++;
+
+                alert(
+                    state.players[winner].name+" voitti!\n\n"+
+                    state.players[0].name+": "+(state.times[0]/1000).toFixed(1)+"s\n"+
+                    state.players[1].name+": "+(state.times[1]/1000).toFixed(1)+"s"
+                );
+
+                save();
+                updateStats();
+            }
+        }
+    });
+}
+
+// ---------- UI ----------
+function updateStats() {
+    function s(p) {
+        let g = p.games||0;
+        let w = p.wins||0;
+        let pct = g?Math.round(w/g*100):0;
+        return `${p.name} ${w}/${g} (${pct}%)`;
+    }
+
+    document.getElementById("stats").innerText =
+        s(state.players[0])+" vs "+s(state.players[1]);
+}
+
+// ---------- INIT ----------
+window.onload = () => {
+    load();
+
+    document.getElementById("p1").value = state.players[0].name;
+    document.getElementById("p2").value = state.players[1].name;
+
+    renderAll();
+};
+
 </script>
 </body>
 </html>
-
