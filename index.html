@@ -1,325 +1,569 @@
+
 <!DOCTYPE html>
 <html lang="fi">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Spider Race 2P</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Itsmyid Arena - Rock Solid</title>
+  <style>
+    :root {
+      --green: #1b5e20;
+      --card-w: 36px;
+      --card-h: 54px;
+      --face-step: 22px;
+      --back-step: 8px;
+      --ui-bg: rgba(0,0,0,0.88);
+    }
 
-<style>
-body {
-    margin:0;
-    font-family:sans-serif;
-    background:#1b5e20;
-    color:white;
-}
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--green);
+      color: #fff;
+      font-family: Arial, sans-serif;
+      touch-action: none;
+    }
 
-#top {
-    background:#111;
-    padding:8px;
-    display:flex;
-    gap:8px;
-    align-items:center;
-}
+    body {
+      display: flex;
+      flex-direction: column;
+    }
 
-input { width:90px; }
+    #ui-layer {
+      background: var(--ui-bg);
+      padding: 6px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      z-index: 1000;
+      flex: 0 0 auto;
+    }
 
-.board {
-    display:flex;
-    justify-content:center;
-    gap:4px;
-    padding:10px;
-}
+    .control-row {
+      grid-column: span 2;
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
 
-.column {
-    width:40px;
-    height:70vh;
-    background:rgba(255,255,255,0.1);
-    position:relative;
-}
+    input, select {
+      height: 38px;
+      font-size: 16px;
+      border: 0;
+      border-radius: 4px;
+      padding: 0 10px;
+      box-sizing: border-box;
+    }
 
-.card {
-    width:40px;
-    height:60px;
-    background:white;
-    color:black;
-    position:absolute;
-    border-radius:4px;
-    text-align:center;
-    font-weight:bold;
-    cursor:pointer;
-}
+    .stat-box, .stats-summary, .btn {
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
 
-.back {
-    background:#0d47a1;
-}
+    .stat-box {
+      background: #333;
+      padding: 7px;
+      text-align: center;
+      font-size: 0.9em;
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-.dragging {
-    opacity:0.8;
-    pointer-events:none;
-    z-index:9999;
-}
-</style>
+    .stats-summary {
+      grid-column: span 2;
+      text-align: center;
+      font-size: 0.9em;
+      color: gold;
+      min-height: 18px;
+      padding: 2px 0;
+    }
+
+    .btn {
+      background: #1565c0;
+      color: #fff;
+      border: none;
+      padding: 10px 12px;
+      font-size: 0.9em;
+      cursor: pointer;
+      min-width: 96px;
+    }
+
+    .btn.green { background: #4caf50; }
+    .btn.gray { background: #666; }
+    .btn.blue { background: #1565c0; }
+
+    #game-board {
+      flex: 1 1 auto;
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      padding: 10px 2px 18px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .column {
+      position: relative;
+      width: var(--card-w);
+      height: 100%;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.05);
+      flex: 0 0 auto;
+    }
+
+    .card {
+      width: var(--card-w);
+      height: var(--card-h);
+      position: absolute;
+      left: 0;
+      top: 0;
+      box-sizing: border-box;
+      border-radius: 4px;
+      border: 1px solid #666;
+      background: #fff;
+      color: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 2px;
+      font-weight: 700;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      pointer-events: auto;
+    }
+
+    .card.back {
+      background: #0d47a1;
+      color: transparent;
+      border: 1px solid #fff;
+    }
+
+    .card.dragging {
+      z-index: 9999 !important;
+      opacity: 0.95;
+      pointer-events: none;
+    }
+
+    .rank {
+      line-height: 1;
+      font-size: 15px;
+    }
+
+    .suit {
+      line-height: 1;
+      font-size: 11px;
+      margin-top: 1px;
+    }
+  </style>
 </head>
-
 <body>
+  <div id="ui-layer">
+    <div class="control-row">
+      <input type="text" id="player-name" placeholder="Nimi" style="width: 110px;" />
+      <select id="game-mode">
+        <option value="spider">Spider</option>
+        <option value="scorpio">Scorpio</option>
+      </select>
+      <button class="btn green" id="new-game-btn">JAO</button>
+    </div>
 
-<div id="top">
-<input id="p1" placeholder="P1">
-<input id="p2" placeholder="P2">
-<button onclick="startGame()">JAO</button>
-<button onclick="undo()">PERUUTA</button>
-<div id="stats"></div>
-</div>
+    <div class="stat-box">Pisteet: <span id="score">500</span></div>
+    <div class="stat-box">Siirrot: <span id="move-count">0</span></div>
 
-<div class="board" id="board0"></div>
-<div class="board" id="board1"></div>
+    <div class="stats-summary" id="win-display"></div>
 
-<script>
+    <button class="btn gray" id="undo-btn">PERUUTA</button>
+    <button class="btn blue" id="deal-btn">JAA LISÄÄ</button>
+  </div>
 
-let state = {
-    players: [
-        {name:"", wins:0, games:0},
-        {name:"", wins:0, games:0}
-    ],
-    boards: [[],[]],
-    history: [[],[]],
-    startTime:0,
-    times:[null,null],
-    finished:[false,false],
-    seed:0
-};
+  <div id="game-board"></div>
 
-let drag = null;
+  <script>
+    const SUIT = "♠";
+    const faceStep = 22;
+    const backStep = 8;
 
-// ---------- STORAGE ----------
-function save() {
-    localStorage.setItem("spider_race", JSON.stringify(state));
-}
+    let currentGame = "spider";
+    let moves = 0;
+    let score = 500;
+    let deck = [];
+    let history = [];
+    let dragData = null;
 
-function load() {
-    const s = localStorage.getItem("spider_race");
-    if (s) state = JSON.parse(s);
-}
+    const board = document.getElementById("game-board");
+    const scoreEl = document.getElementById("score");
+    const moveEl = document.getElementById("move-count");
+    const winEl = document.getElementById("win-display");
+    const nameInput = document.getElementById("player-name");
+    const modeSelect = document.getElementById("game-mode");
+    const dealBtn = document.getElementById("deal-btn");
 
-// ---------- RANDOM (SEED) ----------
-function seededRandom(seed) {
-    return function() {
-        seed = (seed * 16807) % 2147483647;
-        return (seed - 1) / 2147483646;
-    }
-}
-
-function createDeck(seed) {
-    let rand = seededRandom(seed);
-    let d = [];
-
-    for (let i=0;i<8;i++) {
-        for (let v=1;v<=13;v++) d.push(v);
+    function rankText(v) {
+      return ({1:"A",11:"J",12:"Q",13:"K"}[v] || v);
     }
 
-    for (let i=d.length-1;i>0;i--) {
-        let j = Math.floor(rand()* (i+1));
-        [d[i], d[j]] = [d[j], d[i]];
+    function makeCardHTML(v) {
+      return `<div class="rank">${rankText(v)}</div><div class="suit">${SUIT}</div>`;
     }
 
-    return d;
-}
+    function updateStats() {
+      scoreEl.textContent = score;
+      moveEl.textContent = moves;
+    }
 
-// ---------- GAME ----------
-function startGame() {
-    state.players[0].name = document.getElementById("p1").value || "P1";
-    state.players[1].name = document.getElementById("p2").value || "P2";
+    function updateWinUI() {
+      const name = localStorage.getItem("solitaire_player") || "Pelaaja";
+      nameInput.value = name === "Pelaaja" ? "" : name;
+      winEl.textContent = `${name} | Voitot: ${localStorage.getItem("solitaire_wins") || 0}`;
+    }
 
-    state.seed = Date.now();
-    let deck = createDeck(state.seed);
+    function saveName() {
+      const v = nameInput.value.trim() || "Pelaaja";
+      localStorage.setItem("solitaire_player", v);
+      updateWinUI();
+    }
 
-    state.startTime = Date.now();
-    state.times = [null,null];
-    state.finished = [false,false];
-    state.history = [[],[]];
+    function saveWin() {
+      localStorage.setItem("solitaire_wins", String((parseInt(localStorage.getItem("solitaire_wins") || "0", 10) || 0) + 1));
+      updateWinUI();
+    }
 
-    for (let p=0;p<2;p++) {
-        state.boards[p] = [];
-        for (let i=0;i<10;i++) state.boards[p].push([]);
+    function buildBoard(columnCount) {
+      board.innerHTML = "";
+      for (let i = 0; i < columnCount; i++) {
+        const col = document.createElement("div");
+        col.className = "column";
+        board.appendChild(col);
+      }
+    }
 
-        let d = [...deck];
+    function createDeck() {
+      deck = [];
+      const packs = (currentGame === "spider") ? 8 : 4;
+      for (let p = 0; p < packs; p++) {
+        for (let v = 1; v <= 13; v++) deck.push({ v });
+      }
+      deck.sort(() => Math.random() - 0.5);
+    }
 
-        for (let i=0;i<54;i++) {
-            let col = i%10;
-            state.boards[p][col].push({
-                v:d.pop(),
-                up:i>=44
-            });
+    function pushHistory() {
+      const boardData = Array.from(document.querySelectorAll(".column")).map(col =>
+        Array.from(col.children).map(c => ({
+          v: parseInt(c.dataset.value, 10),
+          back: c.classList.contains("back")
+        }))
+      );
+      history.push(JSON.stringify({
+        board: boardData,
+        deck: JSON.parse(JSON.stringify(deck)),
+        score,
+        moves
+      }));
+      if (history.length > 50) history.shift();
+    }
+
+    function fixOffsets(col) {
+      if (!col) return;
+      Array.from(col.children).forEach((c, i) => {
+        const step = c.classList.contains("back") ? backStep : faceStep;
+        c.style.top = (i * step) + "px";
+        c.style.left = "0px";
+        c.style.zIndex = String(i + 1);
+      });
+    }
+
+    function flipTopCard(col) {
+      const last = col.lastElementChild;
+      if (last && last.classList.contains("back")) {
+        last.classList.remove("back");
+        last.innerHTML = makeCardHTML(parseInt(last.dataset.value, 10));
+        last.addEventListener("touchstart", onTouchStart, { passive: false });
+      }
+      fixOffsets(col);
+    }
+
+    function addCard(colIdx, data, visible) {
+      const col = board.children[colIdx];
+      if (!col || !data) return;
+
+      const card = document.createElement("div");
+      card.className = "card" + (visible ? "" : " back");
+      card.dataset.value = data.v;
+
+      if (visible) {
+        card.innerHTML = makeCardHTML(data.v);
+        card.addEventListener("touchstart", onTouchStart, { passive: false });
+      }
+
+      col.appendChild(card);
+      fixOffsets(col);
+      return card;
+    }
+
+    function initGame() {
+      currentGame = modeSelect.value;
+      moves = 0;
+      score = 500;
+      history = [];
+      dragData = null;
+      createDeck();
+
+      const columns = (currentGame === "spider") ? 10 : 7;
+      buildBoard(columns);
+
+      if (currentGame === "spider") {
+        for (let i = 0; i < 54; i++) {
+          addCard(i % 10, deck.pop(), i >= 44);
         }
+      } else {
+        for (let i = 0; i < 49; i++) {
+          const col = i % 7;
+          const row = Math.floor(i / 7);
+          const visible = (row >= 3 && col < 4) || (row >= 2 && col >= 4);
+          addCard(col, deck.pop(), visible);
+        }
+      }
+
+      Array.from(document.querySelectorAll(".column")).forEach(fixOffsets);
+      updateStats();
+      updateWinUI();
+      dealBtn.style.visibility = "visible";
+      pushHistory();
     }
 
-    renderAll();
-    save();
-}
+    function undo() {
+      if (!history.length) return;
+      history.pop();
+      const state = history[history.length - 1];
+      if (!state) {
+        initGame();
+        return;
+      }
 
-// ---------- RENDER ----------
-function renderAll() {
-    renderBoard(0);
-    renderBoard(1);
-    updateStats();
-}
+      const s = JSON.parse(state);
+      deck = s.deck;
+      score = s.score;
+      moves = s.moves;
 
-function renderBoard(p) {
-    const board = document.getElementById("board"+p);
-    board.innerHTML="";
+      buildBoard((currentGame === "spider") ? 10 : 7);
 
-    state.boards[p].forEach((col,ci)=>{
-        const colEl = document.createElement("div");
-        colEl.className="column";
+      s.board.forEach((colData, i) => {
+        colData.forEach(cardData => {
+          addCard(i, { v: cardData.v }, !cardData.back);
+        });
+      });
 
-        col.forEach((card,i)=>{
-            const el = document.createElement("div");
-            el.className="card"+(card.up?"":" back");
-            el.style.top=(i*(card.up?22:8))+"px";
+      Array.from(document.querySelectorAll(".column")).forEach(fixOffsets);
+      updateStats();
+    }
 
-            if (card.up) el.innerText = card.v;
+    function dealMore() {
+      pushHistory();
 
-            el.onpointerdown = e => startDrag(e,p,ci,i);
+      const cols = document.querySelectorAll(".column");
+      if (currentGame === "spider") {
+        if (deck.length < 10) return;
+        for (let i = 0; i < 10; i++) {
+          addCard(i, deck.pop(), true);
+        }
+      } else {
+        if (deck.length < 3) return;
+        for (let i = 0; i < 3; i++) {
+          addCard(i, deck.pop(), true);
+        }
+        dealBtn.style.visibility = "hidden";
+      }
 
-            colEl.appendChild(el);
+      moves++;
+      updateStats();
+    }
+
+    function canMoveSequence(cards) {
+      if (currentGame !== "spider") return true;
+      for (let i = 0; i < cards.length - 1; i++) {
+        const a = parseInt(cards[i].dataset.value, 10);
+        const b = parseInt(cards[i + 1].dataset.value, 10);
+        if (a !== b + 1) return false;
+      }
+      return true;
+    }
+
+    function onTouchStart(e) {
+      e.preventDefault();
+      if (e.touches.length > 1) return;
+
+      const card = e.currentTarget;
+      const col = card.parentElement;
+      const cards = Array.from(col.children);
+      const idx = cards.indexOf(card);
+      const pino = cards.slice(idx);
+
+      if (!canMoveSequence(pino)) return;
+
+      const rect = card.getBoundingClientRect();
+      dragData = {
+        pino,
+        sourceCol: col,
+        offsetX: e.touches[0].clientX - rect.left,
+        offsetY: e.touches[0].clientY - rect.top
+      };
+
+      pino.forEach((c, i) => {
+        c.classList.add("dragging");
+        c.style.left = rect.left + "px";
+        c.style.top = (rect.top + i * faceStep) + "px";
+        document.body.appendChild(c);
+      });
+
+      document.addEventListener("touchmove", onTouchMove, { passive: false });
+      document.addEventListener("touchend", onTouchEnd, { passive: false });
+      document.addEventListener("touchcancel", onTouchCancel, { passive: false });
+    }
+
+    function onTouchMove(e) {
+      if (!dragData) return;
+      e.preventDefault();
+
+      const x = e.touches[0].clientX - dragData.offsetX;
+      const y = e.touches[0].clientY - dragData.offsetY;
+
+      dragData.pino.forEach((c, i) => {
+        c.style.left = x + "px";
+        c.style.top = (y + i * faceStep) + "px";
+      });
+    }
+
+    function getTargetColumn(clientX, clientY) {
+      const cols = Array.from(document.querySelectorAll(".column"));
+      for (const col of cols) {
+        const r = col.getBoundingClientRect();
+        if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom + 80) {
+          return col;
+        }
+      }
+      return null;
+    }
+
+    function tryDrop(targetCol) {
+      const movingTop = dragData.pino[0];
+      const movingVal = parseInt(movingTop.dataset.value, 10);
+      const last = targetCol.lastElementChild;
+
+      if (!last) {
+        return currentGame === "spider" || movingVal === 13;
+      }
+
+      const lastVal = parseInt(last.dataset.value, 10);
+      return lastVal === movingVal + 1;
+    }
+
+    function finishDrag(success, targetCol) {
+      if (success) {
+        dragData.pino.forEach(c => {
+          c.classList.remove("dragging");
+          targetCol.appendChild(c);
         });
 
-        board.appendChild(colEl);
+        score -= 1;
+        moves += 1;
+
+        fixOffsets(targetCol);
+        fixOffsets(dragData.sourceCol);
+        flipTopCard(dragData.sourceCol);
+
+        if (targetCol) checkWin(targetCol);
+      } else {
+        dragData.pino.forEach(c => {
+          c.classList.remove("dragging");
+          dragData.sourceCol.appendChild(c);
+        });
+        fixOffsets(dragData.sourceCol);
+      }
+
+      Array.from(document.querySelectorAll(".column")).forEach(fixOffsets);
+      updateStats();
+
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchCancel);
+      dragData = null;
+    }
+
+    function onTouchEnd(e) {
+      if (!dragData) return;
+      e.preventDefault();
+
+      const touch = e.changedTouches[0];
+      const targetCol = getTargetColumn(touch.clientX, touch.clientY);
+
+      if (targetCol && tryDrop(targetCol)) {
+        pushHistory();
+        finishDrag(true, targetCol);
+      } else {
+        finishDrag(false, null);
+      }
+    }
+
+    function onTouchCancel() {
+      if (!dragData) return;
+      finishDrag(false, null);
+    }
+
+    function checkWin(col) {
+      const cards = Array.from(col.children);
+      if (cards.length < 13) return;
+
+      for (let i = 0; i <= cards.length - 13; i++) {
+        let ok = true;
+        for (let j = 0; j < 12; j++) {
+          const a = cards[i + j];
+          const b = cards[i + j + 1];
+          if (
+            a.classList.contains("back") ||
+            parseInt(a.dataset.value, 10) !== parseInt(b.dataset.value, 10) + 1
+          ) {
+            ok = false;
+            break;
+          }
+        }
+
+        if (ok && parseInt(cards[i].dataset.value, 10) === 13) {
+          for (let k = 0; k < 13; k++) {
+            cards[i].remove();
+          }
+
+          score += 100;
+          fixOffsets(col);
+          flipTopCard(col);
+
+          if (document.querySelectorAll(".card").length === 0) {
+            saveWin();
+            alert("VOITTO!");
+          }
+          return;
+        }
+      }
+    }
+
+    document.getElementById("new-game-btn").addEventListener("click", initGame);
+    document.getElementById("undo-btn").addEventListener("click", undo);
+    document.getElementById("deal-btn").addEventListener("click", dealMore);
+    nameInput.addEventListener("change", saveName);
+    modeSelect.addEventListener("change", initGame);
+
+    window.addEventListener("load", () => {
+      const savedName = localStorage.getItem("solitaire_player");
+      if (savedName) nameInput.value = savedName === "Pelaaja" ? "" : savedName;
+      updateWinUI();
+      initGame();
     });
-}
-
-// ---------- DRAG ----------
-function startDrag(e,p,ci,i) {
-    const col = state.boards[p][ci];
-    if (!col[i].up) return;
-
-    saveHistory(p);
-
-    drag = {
-        p, ci, i,
-        cards: col.slice(i)
-    };
-
-    col.splice(i);
-
-    document.onpointermove = moveDrag;
-    document.onpointerup = endDrag;
-}
-
-function moveDrag(e) {}
-
-function endDrag(e) {
-    const board = document.getElementById("board"+drag.p);
-    const cols = board.children;
-
-    let target = null;
-
-    for (let i=0;i<cols.length;i++) {
-        let r = cols[i].getBoundingClientRect();
-        if (e.clientX > r.left && e.clientX < r.right) {
-            target = i;
-        }
-    }
-
-    let success = false;
-
-    if (target !== null) {
-        let to = state.boards[drag.p][target];
-        let first = drag.cards[0].v;
-
-        if (!to.length || to[to.length-1].v === first+1) {
-            drag.cards.forEach(c=>to.push(c));
-            success = true;
-        }
-    }
-
-    if (!success) {
-        drag.cards.forEach(c=>state.boards[drag.p][drag.ci].push(c));
-    } else {
-        let src = state.boards[drag.p][drag.ci];
-        let last = src[src.length-1];
-        if (last && !last.up) last.up = true;
-    }
-
-    drag = null;
-
-    renderBoard(0);
-    renderBoard(1);
-    checkWin();
-    save();
-
-    document.onpointermove = null;
-    document.onpointerup = null;
-}
-
-// ---------- UNDO ----------
-function saveHistory(p) {
-    state.history[p].push(JSON.stringify(state.boards[p]));
-    if (state.history[p].length > 50) state.history[p].shift();
-}
-
-function undo() {
-    for (let p=0;p<2;p++) {
-        if (state.history[p].length) {
-            state.boards[p] = JSON.parse(state.history[p].pop());
-        }
-    }
-    renderAll();
-}
-
-// ---------- WIN ----------
-function checkWin() {
-    state.boards.forEach((b,p)=>{
-        let total=0;
-        b.forEach(c=>total+=c.length);
-
-        if (total===0 && !state.finished[p]) {
-            state.finished[p]=true;
-            state.times[p]=Date.now()-state.startTime;
-
-            if (state.finished[0] && state.finished[1]) {
-                let winner = state.times[0] < state.times[1] ? 0 : 1;
-
-                state.players[winner].wins++;
-                state.players[0].games++;
-                state.players[1].games++;
-
-                alert(
-                    state.players[winner].name+" voitti!\n\n"+
-                    state.players[0].name+": "+(state.times[0]/1000).toFixed(1)+"s\n"+
-                    state.players[1].name+": "+(state.times[1]/1000).toFixed(1)+"s"
-                );
-
-                save();
-                updateStats();
-            }
-        }
-    });
-}
-
-// ---------- UI ----------
-function updateStats() {
-    function s(p) {
-        let g = p.games||0;
-        let w = p.wins||0;
-        let pct = g?Math.round(w/g*100):0;
-        return `${p.name} ${w}/${g} (${pct}%)`;
-    }
-
-    document.getElementById("stats").innerText =
-        s(state.players[0])+" vs "+s(state.players[1]);
-}
-
-// ---------- INIT ----------
-window.onload = () => {
-    load();
-
-    document.getElementById("p1").value = state.players[0].name;
-    document.getElementById("p2").value = state.players[1].name;
-
-    renderAll();
-};
-
-</script>
+  </script>
 </body>
 </html>
